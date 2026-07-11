@@ -5,7 +5,7 @@ import { SiteSettings, MenuItem, SubMenuItem } from '../../types';
 import { 
   Settings as SettingsIcon, Globe, Palette, Shield, Share2, Save, 
   Sparkles, Layout, Check, Megaphone, ExternalLink, Code, Clock,
-  Plus, Trash2, ArrowLeft, Menu, ChevronRight, ChevronLeft
+  Plus, Trash2, ArrowLeft, Menu, ChevronRight, ChevronLeft, HelpCircle
 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
@@ -81,9 +81,16 @@ export default function SiteSettingsPage() {
           promoLink3: savedData.adConfig?.promoLink3 || defaultPromoConfig.promoLink3,
           promoIcon3: savedData.adConfig?.promoIcon3 || defaultPromoConfig.promoIcon3
         };
+        const supportConfigMerged = {
+          telegramUrl: savedData.supportConfig?.telegramUrl || '',
+          facebookUrl: savedData.supportConfig?.facebookUrl || '',
+          showTelegramWidget: savedData.supportConfig?.showTelegramWidget ?? true,
+          widgetMessage: savedData.supportConfig?.widgetMessage || 'আমাদের সাথে সরাসরি যোগাযোগ করতে এখানে ক্লিক করুন!'
+        };
         reset({
           ...savedData,
-          adConfig: adConfigMerged
+          adConfig: adConfigMerged,
+          supportConfig: supportConfigMerged
         });
       } else {
         // Defaults
@@ -100,6 +107,12 @@ export default function SiteSettingsPage() {
           footerText: '© 2026 StreamHub. All rights reserved.',
           contactEmail: 'admin@streamhub.io',
           socialLinks: { twitter: '', facebook: '', instagram: '', youtube: '' },
+          supportConfig: {
+            telegramUrl: 'https://t.me/streamhub_support',
+            facebookUrl: 'https://facebook.com/streamhub',
+            showTelegramWidget: true,
+            widgetMessage: 'যেকোনো প্রয়োজনে আমাদের সাপোর্ট টিমের সাথে যোগাযোগ করুন।'
+          },
           featureToggles: { lockedVideoScreen: true, darkMode: true },
           adConfig: {
             enabled: false,
@@ -265,6 +278,74 @@ export default function SiteSettingsPage() {
                   <span className="text-sm font-medium">Force Dark Mode</span>
                 </label>
               </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Support & Help Center Settings */}
+        <section className="bg-neutral-900 border border-white/5 rounded-3xl p-8 shadow-2xl space-y-6">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-rose-500/10 rounded-lg">
+              <HelpCircle className="w-5 h-5 text-rose-500" />
+            </div>
+            <div className="flex flex-col">
+              <h2 className="text-xl font-bold">Help Center & Support Settings (হেল্প সেন্টার এবং সাপোর্ট)</h2>
+              <p className="text-xs text-neutral-500">Configure your Facebook and Telegram support links, and manage the floating chat widget</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-neutral-400 uppercase tracking-widest flex items-center gap-1.5">
+                Telegram Support Link (টেলিগ্রাম লিঙ্ক)
+              </label>
+              <input 
+                {...register('supportConfig.telegramUrl')} 
+                placeholder="e.g., https://t.me/your_telegram" 
+                className="w-full bg-neutral-800 border border-white/5 rounded-xl py-3 px-4 focus:outline-none focus:border-rose-500 transition-colors text-sm" 
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-neutral-400 uppercase tracking-widest flex items-center gap-1.5">
+                Facebook Support Link (ফেসবুক লিঙ্ক)
+              </label>
+              <input 
+                {...register('supportConfig.facebookUrl')} 
+                placeholder="e.g., https://facebook.com/your_page" 
+                className="w-full bg-neutral-800 border border-white/5 rounded-xl py-3 px-4 focus:outline-none focus:border-rose-500 transition-colors text-sm" 
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-neutral-400 uppercase tracking-widest flex items-center gap-1.5">
+                Floating Telegram Widget (টেলিগ্রাম পপআপ উইজেট)
+              </label>
+              <div className="flex items-center gap-4 p-3.5 bg-neutral-800 rounded-xl border border-white/5">
+                <label className="flex items-center gap-3 cursor-pointer group w-full">
+                  <div className="relative">
+                    <input 
+                      type="checkbox" 
+                      {...register('supportConfig.showTelegramWidget')} 
+                      className="peer sr-only" 
+                    />
+                    <div className="w-10 h-6 bg-neutral-700 rounded-full transition-colors peer-checked:bg-rose-600" />
+                    <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-4" />
+                  </div>
+                  <span className="text-sm font-medium">Enable floating left-side widget (পপআপ চালু করুন)</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-neutral-400 uppercase tracking-widest flex items-center gap-1.5">
+                Widget Welcome Message (পপআপ মেসেজ)
+              </label>
+              <input 
+                {...register('supportConfig.widgetMessage')} 
+                placeholder="e.g., যেকোনো প্রয়োজনে আমাদের সাথে সরাসরি যোগাযোগ করতে এখানে ক্লিক করুন!" 
+                className="w-full bg-neutral-800 border border-white/5 rounded-xl py-3 px-4 focus:outline-none focus:border-rose-500 transition-colors text-sm" 
+              />
             </div>
           </div>
         </section>

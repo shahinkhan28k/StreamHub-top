@@ -9,9 +9,11 @@ import { getStoredVideos, subscribeStoredVideos } from '../lib/videoStore';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import AdRenderer from '../components/AdRenderer';
+import { useAuth } from '../context/AuthContext';
 
 export default function Home() {
   useSEO('Home - Premium Video Streaming', 'Stream the latest movies, sports, and gaming content on StreamHub.');
+  const { isAdmin } = useAuth();
   const [featuredVideo, setFeaturedVideo] = useState<Video | null>(null);
   const [trendingVideos, setTrendingVideos] = useState<Video[]>([]);
   const [latestVideos, setLatestVideos] = useState<Video[]>([]);
@@ -26,41 +28,6 @@ export default function Home() {
       if (docSnap.exists()) {
         const settings = docSnap.data() as SiteSettings;
         setSiteSettings(settings);
-
-        // Dynamic script injection for Popunder, Social Bar, PopunderTOP, and Social BarTOP
-        if (settings.adConfig?.enabled) {
-          const adConfig = settings.adConfig;
-          const scriptsToInject = [
-            { id: 'ad-popunder', code: adConfig.popunderScript },
-            { id: 'ad-socialbar', code: adConfig.socialBarScript },
-            { id: 'ad-popundertop', code: adConfig.popunderTopScript },
-            { id: 'ad-socialbartop', code: adConfig.socialBarTopScript }
-          ];
-
-          scriptsToInject.forEach(({ id, code }) => {
-            if (code && !document.getElementById(id)) {
-              const script = document.createElement('script');
-              script.id = id;
-              
-              if (code.includes('<script')) {
-                const temp = document.createElement('div');
-                temp.innerHTML = code;
-                const actualScript = temp.querySelector('script');
-                if (actualScript) {
-                  Array.from(actualScript.attributes).forEach(attr => {
-                    script.setAttribute(attr.name, attr.value);
-                  });
-                  script.innerHTML = actualScript.innerHTML;
-                } else {
-                  script.innerHTML = code;
-                }
-              } else {
-                script.innerHTML = code;
-              }
-              document.body.appendChild(script);
-            }
-          });
-        }
       }
     });
 
@@ -97,6 +64,59 @@ export default function Home() {
     };
   }, []);
 
+  useEffect(() => {
+    // Clean up existing injected ad scripts if user is admin or ads are disabled
+    const scriptIds = ['ad-popunder', 'ad-socialbar', 'ad-popundertop', 'ad-socialbartop'];
+    
+    if (isAdmin || !siteSettings?.adConfig?.enabled) {
+      scriptIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.remove();
+      });
+      return;
+    }
+
+    const adConfig = siteSettings.adConfig;
+    const scriptsToInject = [
+      { id: 'ad-popunder', code: adConfig.popunderScript },
+      { id: 'ad-socialbar', code: adConfig.socialBarScript },
+      { id: 'ad-popundertop', code: adConfig.popunderTopScript },
+      { id: 'ad-socialbartop', code: adConfig.socialBarTopScript }
+    ];
+
+    scriptsToInject.forEach(({ id, code }) => {
+      if (code && !document.getElementById(id)) {
+        const script = document.createElement('script');
+        script.id = id;
+        
+        if (code.includes('<script')) {
+          const temp = document.createElement('div');
+          temp.innerHTML = code;
+          const actualScript = temp.querySelector('script');
+          if (actualScript) {
+            Array.from(actualScript.attributes).forEach(attr => {
+              script.setAttribute(attr.name, attr.value);
+            });
+            script.innerHTML = actualScript.innerHTML;
+          } else {
+            script.innerHTML = code;
+          }
+        } else {
+          script.innerHTML = code;
+        }
+        document.body.appendChild(script);
+      }
+    });
+
+    return () => {
+      // Cleanup on unmount or when dependencies change
+      scriptIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.remove();
+      });
+    };
+  }, [siteSettings, isAdmin]);
+
   const getCategoriesFromMenu = () => {
     const menu = siteSettings?.navigationMenu || [
       { id: '1', label: 'Home', link: '/' },
@@ -119,7 +139,7 @@ export default function Home() {
   return (
     <div className="space-y-12">
       {/* Smartlink Top Alert Bar */}
-      {siteSettings?.adConfig?.enabled && siteSettings.adConfig.smartlinkUrl && (
+      {siteSettings?.adConfig?.enabled && siteSettings.adConfig.smartlinkUrl && !isAdmin && (
         <div className="bg-rose-600/10 border-b border-rose-500/20 text-rose-500 py-3 px-4 text-center text-xs font-semibold flex items-center justify-center gap-2 animate-pulse">
           <span className="bg-rose-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">PREMIUM</span>
           <span>⚡ High Speed Server 2 ( Ultra HD 4K ) buffer-free streaming is available now!</span>
@@ -276,7 +296,7 @@ export default function Home() {
       </section>
 
       {/* Smartlink/Banner Ad Spot #3 (Bottom Spot / Above Footer) */}
-      {siteSettings?.adConfig?.enabled && siteSettings.adConfig.smartlinkUrl && (
+      {siteSettings?.adConfig?.enabled && siteSettings.adConfig.smartlinkUrl && !isAdmin && (
         <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-16">
           <div className="bg-neutral-900 border border-white/5 rounded-3xl p-8 flex flex-col md:flex-row items-center justify-between gap-6 hover:border-rose-500/20 transition-colors">
             <div className="space-y-2 text-center md:text-left">

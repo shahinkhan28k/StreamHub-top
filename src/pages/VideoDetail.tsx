@@ -15,6 +15,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import VideoCard from '../components/VideoCard';
 import { getSingleStoredVideo, getStoredVideos } from '../lib/videoStore';
 import AdRenderer from '../components/AdRenderer';
+import Hls from 'hls.js';
 
 // Preprocess URLs to ensure standard cloud drives return direct media streaming streams or clean embed src
 function preprocessVideoUrl(url: string): string {
@@ -187,7 +188,7 @@ function getEmbedUrl(url: string) {
 
 export default function VideoDetail() {
   const { id } = useParams<{ id: string }>();
-  const { user, profile } = useAuth();
+  const { user, profile, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [video, setVideo] = useState<Video | null>(null);
   const [siteSettings, setSiteSettings] = useState<SiteSettings | null>(null);
@@ -209,9 +210,15 @@ export default function VideoDetail() {
   const [isMuted, setIsMuted] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const controlsTimeout = useRef<number | null>(null);
   const [videoError, setVideoError] = useState(false);
+
+  const processedUrl = video ? preprocessVideoUrl(video.videoUrl) : '';
+  const embedUrl = getEmbedUrl(processedUrl);
 
   useEffect(() => {
     if (!id) return;
@@ -294,48 +301,13 @@ export default function VideoDetail() {
 
         setSiteSettings(settings);
 
-        // Inject scripts if enabled
-        if (settings.adConfig?.enabled) {
-          const adConfig = settings.adConfig;
-          const scriptsToInject = [
-            { id: 'ad-popunder', code: adConfig.popunderScript },
-            { id: 'ad-socialbar', code: adConfig.socialBarScript },
-            { id: 'ad-popundertop', code: adConfig.popunderTopScript },
-            { id: 'ad-socialbartop', code: adConfig.socialBarTopScript }
-          ];
-
-          scriptsToInject.forEach(({ id, code }) => {
-            if (code && !document.getElementById(id)) {
-              const script = document.createElement('script');
-              script.id = id;
-              
-              if (code.includes('<script')) {
-                const temp = document.createElement('div');
-                temp.innerHTML = code;
-                const actualScript = temp.querySelector('script');
-                if (actualScript) {
-                  Array.from(actualScript.attributes).forEach(attr => {
-                    script.setAttribute(attr.name, attr.value);
-                  });
-                  script.innerHTML = actualScript.innerHTML;
-                } else {
-                  script.innerHTML = code;
-                }
-              } else {
-                script.innerHTML = code;
-              }
-              document.body.appendChild(script);
-            }
-          });
-        }
-
         // Fetch Single Video from unified, resilient videoStore
         const videoData = await getSingleStoredVideo(id);
         
         if (videoData) {
           setVideo(videoData);
           
-          if (videoData.locked && !isUnlocked && settings?.adConfig?.enabled) {
+          if (videoData.locked && !isUnlocked && settings?.adConfig?.enabled && !isAdmin) {
             setShowLockedScreen(true);
             setAdTimer(settings.adConfig.timerSeconds || 10);
           }
@@ -383,7 +355,161 @@ export default function VideoDetail() {
 
     fetchVideoAndSettings();
     window.scrollTo(0, 0);
-  }, [id, navigate, isUnlocked]);
+  }, [id, navigate, isUnlocked, isAdmin]);
+
+  useEffect(() => {
+    // Clean up existing injected ad scripts if user is admin or ads are disabled
+    const scriptIds = ['ad-popunder', 'ad-socialbar', 'ad-popundertop', 'ad-socialbartop'];
+    
+    if (isAdmin || !siteSettings?.adConfig?.enabled) {
+      scriptIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.remove();
+      });
+      return;
+    }
+
+    const adConfig = siteSettings.adConfig;
+    const scriptsToInject = [
+      { id: 'ad-popunder', code: adConfig.popunderScript },
+      { id: 'ad-socialbar', code: adConfig.socialBarScript },
+      { id: 'ad-popundertop', code: adConfig.popunderTopScript },
+      { id: 'ad-socialbartop', code: adConfig.socialBarTopScript }
+    ];
+
+    scriptsToInject.forEach(({ id, code }) => {
+      if (code && !document.getElementById(id)) {
+        const script = document.createElement('script');
+        script.id = id;
+        
+        if (code.includes('<script')) {
+          const temp = document.createElement('div');
+          temp.innerHTML = code;
+          const actualScript = temp.querySelector('script');
+          if (actualScript) {
+            Array.from(actualScript.attributes).forEach(attr => {
+              script.setAttribute(attr.name, attr.value);
+            });
+            script.innerHTML = actualScript.innerHTML;
+          } else {
+            script.innerHTML = code;
+          }
+        } else {
+          script.innerHTML = code;
+        }
+        document.body.appendChild(script);
+      }
+    });
+
+    return () => {
+      // Cleanup on unmount or when dependencies change
+      scriptIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.remove();
+      });
+    };
+  }, [siteSettings, isAdmin]);
+
+  useEffect(() => {
+    if (isAdmin) {
+      setShowLockedScreen(false);
+    }
+  }, [isAdmin]);
+
+  // Controls click-away speed menu closer
+  useEffect(() => {
+    const handleCloseMenu = () => {
+      setShowSpeedMenu(false);
+    };
+    window.addEventListener('click', handleCloseMenu);
+    return () => {
+      window.removeEventListener('click', handleCloseMenu);
+    };
+  }, []);
+
+  // Controls auto-hide mechanism
+  useEffect(() => {
+    const handleMouseMove = () => {
+      setShowControls(true);
+      if (controlsTimeout.current) {
+        window.clearTimeout(controlsTimeout.current);
+      }
+      controlsTimeout.current = window.setTimeout(() => {
+        if (isPlaying) {
+          setShowControls(false);
+        }
+      }, 3000);
+    };
+
+    const container = videoRef.current?.parentElement;
+    if (container) {
+      container.addEventListener('mousemove', handleMouseMove);
+      container.addEventListener('click', handleMouseMove);
+    }
+
+    return () => {
+      if (controlsTimeout.current) {
+        window.clearTimeout(controlsTimeout.current);
+      }
+      if (container) {
+        container.removeEventListener('mousemove', handleMouseMove);
+        container.removeEventListener('click', handleMouseMove);
+      }
+    };
+  }, [isPlaying]);
+
+  // Hls.js initializer
+  useEffect(() => {
+    let hls: Hls | null = null;
+    const videoElement = videoRef.current;
+
+    if (videoElement && processedUrl) {
+      const isM3U8 = processedUrl.toLowerCase().includes('.m3u8');
+      
+      if (isM3U8) {
+        if (Hls.isSupported()) {
+          hls = new Hls({
+            enableWorker: true,
+            lowLatencyMode: true,
+            backBufferLength: 90
+          });
+          hls.loadSource(processedUrl);
+          hls.attachMedia(videoElement);
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            // manifest loaded
+          });
+          hls.on(Hls.Events.ERROR, (event, data) => {
+            if (data.fatal) {
+              switch (data.type) {
+                case Hls.ErrorTypes.NETWORK_ERROR:
+                  console.error("HLS network error, attempting recovery...");
+                  hls?.startLoad();
+                  break;
+                case Hls.ErrorTypes.MEDIA_ERROR:
+                  console.error("HLS media error, attempting recovery...");
+                  hls?.recoverMediaError();
+                  break;
+                default:
+                  console.error("Fatal HLS error, destroying player.");
+                  hls?.destroy();
+                  break;
+              }
+            }
+          });
+        } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
+          videoElement.src = processedUrl;
+        }
+      } else {
+        videoElement.src = processedUrl;
+      }
+    }
+
+    return () => {
+      if (hls) {
+        hls.destroy();
+      }
+    };
+  }, [processedUrl]);
 
   const togglePlay = () => {
     if (!videoRef.current) return;
@@ -397,15 +523,23 @@ export default function VideoDetail() {
 
   const handleTimeUpdate = () => {
     if (videoRef.current) {
-      setProgress((videoRef.current.currentTime / videoRef.current.duration) * 100);
+      const current = videoRef.current.currentTime;
+      const dur = videoRef.current.duration;
+      setCurrentTime(current);
+      setDuration(dur);
+      if (dur > 0) {
+        setProgress((current / dur) * 100);
+      }
     }
   };
 
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleScrub = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (videoRef.current) {
-      const time = (parseFloat(e.target.value) / 100) * videoRef.current.duration;
-      videoRef.current.currentTime = time;
-      setProgress(parseFloat(e.target.value));
+      const newProgress = parseFloat(e.target.value);
+      const newTime = (newProgress / 100) * videoRef.current.duration;
+      videoRef.current.currentTime = newTime;
+      setProgress(newProgress);
+      setCurrentTime(newTime);
     }
   };
 
@@ -421,18 +555,55 @@ export default function VideoDetail() {
     setVolume(v);
     if (videoRef.current) {
       videoRef.current.volume = v;
+      videoRef.current.muted = v === 0;
       setIsMuted(v === 0);
     }
   };
 
   const toggleFullscreen = () => {
     if (videoRef.current) {
+      const parent = videoRef.current.parentElement;
       if (document.fullscreenElement) {
         document.exitFullscreen();
-      } else {
-        videoRef.current.parentElement?.requestFullscreen();
+      } else if (parent?.requestFullscreen) {
+        parent.requestFullscreen();
       }
     }
+  };
+
+  const skipBackward = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (videoRef.current) {
+      videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime - 10);
+    }
+  };
+
+  const skipForward = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (videoRef.current) {
+      videoRef.current.currentTime = Math.min(videoRef.current.duration, videoRef.current.currentTime + 10);
+    }
+  };
+
+  const changeSpeed = (e: React.MouseEvent, rate: number) => {
+    e.stopPropagation();
+    setPlaybackRate(rate);
+    if (videoRef.current) {
+      videoRef.current.playbackRate = rate;
+    }
+    setShowSpeedMenu(false);
+  };
+
+  const formatTime = (timeInSeconds: number) => {
+    if (isNaN(timeInSeconds) || timeInSeconds === Infinity) return "00:00";
+    const hrs = Math.floor(timeInSeconds / 3600);
+    const mins = Math.floor((timeInSeconds % 3600) / 60);
+    const secs = Math.floor(timeInSeconds % 60);
+    
+    if (hrs > 0) {
+      return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   const handleCommentSubmit = async (e: React.FormEvent) => {
@@ -508,9 +679,6 @@ export default function VideoDetail() {
   }
 
   if (!video) return null;
-
-  const processedUrl = preprocessVideoUrl(video.videoUrl);
-  const embedUrl = getEmbedUrl(processedUrl);
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
@@ -688,23 +856,158 @@ export default function VideoDetail() {
               ) : (
                 <div className="w-full h-full relative bg-neutral-950 flex items-center justify-center">
                   {processedUrl ? (
-                    <div className="w-full h-full relative">
+                    <div className="w-full h-full relative group">
                       <video
                         key={processedUrl}
                         ref={videoRef}
-                        src={processedUrl}
                         poster={video.thumbnail}
                         className="w-full h-full object-contain bg-black cursor-pointer"
                         preload="auto"
                         playsInline
                         webkit-playsinline="true"
-                        controls
                         onClick={togglePlay}
                         onPlay={() => setIsPlaying(true)}
                         onPause={() => setIsPlaying(false)}
                         onTimeUpdate={handleTimeUpdate}
+                        onLoadedMetadata={handleTimeUpdate}
                         onEnded={() => setIsPlaying(false)}
                       />
+                      
+                      {/* Premium Custom Player Controls Overlay */}
+                      <div 
+                        className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/70 to-transparent p-4 md:p-6 flex flex-col gap-3 transition-opacity duration-300 z-20 ${
+                          showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                        }`}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {/* Progress Bar (Scrubber) */}
+                        <div className="flex items-center gap-3 w-full">
+                          <span className="text-[10px] font-mono text-neutral-300 select-none">
+                            {formatTime(currentTime)}
+                          </span>
+                          <input 
+                            type="range"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                            value={isNaN(progress) ? 0 : progress}
+                            onChange={handleScrub}
+                            className="flex-1 h-1.5 bg-neutral-700/60 rounded-lg appearance-none cursor-pointer accent-rose-600 focus:outline-none focus:ring-0"
+                            style={{
+                              background: `linear-gradient(to right, #e11d48 0%, #e11d48 ${progress}%, rgba(82, 82, 82, 0.6) ${progress}%, rgba(82, 82, 82, 0.6) 100%)`
+                            }}
+                          />
+                          <span className="text-[10px] font-mono text-neutral-300 select-none">
+                            {duration === Infinity ? (
+                              <span className="flex items-center gap-1 text-rose-500 font-bold tracking-wider uppercase text-[9px] animate-pulse">
+                                <span className="w-1.5 h-1.5 bg-rose-600 rounded-full" /> LIVE
+                              </span>
+                            ) : (
+                              formatTime(duration)
+                            )}
+                          </span>
+                        </div>
+
+                        {/* Control Buttons Row */}
+                        <div className="flex items-center justify-between">
+                          {/* Left Controls */}
+                          <div className="flex items-center gap-4">
+                            <button 
+                              type="button"
+                              onClick={togglePlay}
+                              className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-white"
+                              title={isPlaying ? "Pause" : "Play"}
+                            >
+                              {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current" />}
+                            </button>
+
+                            {/* Skip 10s Backward */}
+                            <button 
+                              type="button"
+                              onClick={skipBackward}
+                              className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-neutral-300 hover:text-white"
+                              title="Rewind 10s"
+                            >
+                              <Rewind className="w-5 h-5" />
+                            </button>
+
+                            {/* Skip 10s Forward */}
+                            <button 
+                              type="button"
+                              onClick={skipForward}
+                              className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-neutral-300 hover:text-white"
+                              title="Fast Forward 10s"
+                            >
+                              <FastForward className="w-5 h-5" />
+                            </button>
+
+                            {/* Volume Control */}
+                            <div className="flex items-center gap-2 group/volume">
+                              <button 
+                                type="button"
+                                onClick={toggleMute}
+                                className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-neutral-300 hover:text-white"
+                              >
+                                {isMuted || volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+                              </button>
+                              <input 
+                                type="range"
+                                min="0"
+                                max="1"
+                                step="0.05"
+                                value={isMuted ? 0 : volume}
+                                onChange={handleVolumeChange}
+                                className="w-16 h-1 bg-neutral-700/60 rounded-lg appearance-none cursor-pointer accent-white hover:accent-rose-500 md:w-20 transition-all"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Right Controls */}
+                          <div className="flex items-center gap-3 relative">
+                            {/* Speed Button */}
+                            <div className="relative">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setShowSpeedMenu(!showSpeedMenu);
+                                }}
+                                className="px-2.5 py-1 text-xs font-bold text-neutral-300 hover:text-white bg-neutral-900/80 hover:bg-neutral-800 rounded-lg border border-white/5 flex items-center gap-1 transition-all"
+                              >
+                                <span>{playbackRate === 1 ? 'Normal' : `${playbackRate}x`}</span>
+                                <span className="text-[10px] text-neutral-400 font-normal">Speed</span>
+                              </button>
+
+                              {showSpeedMenu && (
+                                <div className="absolute bottom-full right-0 mb-2 w-28 bg-neutral-900 border border-white/10 rounded-xl py-1.5 shadow-2xl z-30">
+                                  {[0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => (
+                                    <button
+                                      key={rate}
+                                      type="button"
+                                      onClick={(e) => changeSpeed(e, rate)}
+                                      className={`w-full text-left px-3 py-1.5 text-xs font-semibold hover:bg-white/5 transition-colors ${
+                                        playbackRate === rate ? 'text-rose-500' : 'text-neutral-300'
+                                      }`}
+                                    >
+                                      {rate === 1 ? 'Normal (1x)' : `${rate}x`}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Fullscreen */}
+                            <button 
+                              type="button"
+                              onClick={toggleFullscreen}
+                              className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-neutral-300 hover:text-white"
+                              title="Fullscreen"
+                            >
+                              <Maximize className="w-5 h-5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
                       
                       {/* Big Center Play Button Overlay */}
                       {!isPlaying && (
@@ -802,7 +1105,7 @@ export default function VideoDetail() {
                 >
                   <ExternalLink className="w-3.5 h-3.5" /> সরাসরি প্লে করুন (Play Direct)
                 </a>
-                {siteSettings?.adConfig?.enabled && siteSettings.adConfig.smartlinkUrl && (
+                {siteSettings?.adConfig?.enabled && siteSettings.adConfig.smartlinkUrl && !isAdmin && (
                   <a 
                     href={siteSettings.adConfig.smartlinkUrl} 
                     target="_blank" 

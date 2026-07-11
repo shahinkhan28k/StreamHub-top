@@ -16,6 +16,7 @@ import SiteSettingsPage from './pages/admin/SiteSettingsPage';
 import UserManagement from './pages/admin/UserManagement';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
+import FloatingSupport from './components/FloatingSupport';
 
 const ProtectedRoute = ({ children, adminOnly = false }: { children: React.ReactNode, adminOnly?: boolean }) => {
   const { user, profile, loading } = useAuth();
@@ -84,6 +85,7 @@ const AppContent = () => {
           </Routes>
         </main>
         <Footer />
+        <FloatingSupport />
       </div>
     </Router>
   );

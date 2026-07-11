@@ -84,6 +84,12 @@ export interface SiteSettings {
     instagram?: string;
     youtube?: string;
   };
+  supportConfig?: {
+    telegramUrl?: string;
+    facebookUrl?: string;
+    showTelegramWidget?: boolean;
+    widgetMessage?: string;
+  };
   navigationMenu?: MenuItem[];
   featureToggles: {
     lockedVideoScreen: boolean;

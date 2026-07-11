@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { useAuth } from '../context/AuthContext';
 
 interface AdRendererProps {
   htmlCode?: string;
@@ -7,9 +8,10 @@ interface AdRendererProps {
 
 export default function AdRenderer({ htmlCode, className = "" }: AdRendererProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const { isAdmin } = useAuth();
 
   useEffect(() => {
-    if (!htmlCode || !containerRef.current) return;
+    if (isAdmin || !htmlCode || !containerRef.current) return;
 
     // Clear old elements
     containerRef.current.innerHTML = '';
@@ -35,9 +37,9 @@ export default function AdRenderer({ htmlCode, className = "" }: AdRendererProps
         containerRef.current.appendChild(node.cloneNode(true));
       }
     });
-  }, [htmlCode]);
+  }, [htmlCode, isAdmin]);
 
-  if (!htmlCode) return null;
+  if (isAdmin || !htmlCode) return null;
 
   return (
     <div 
