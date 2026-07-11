@@ -56,6 +56,41 @@ const CDN_PRESETS = [
   }
 ];
 
+// Preprocess URLs to ensure standard cloud drives return direct media streaming streams or clean embed src
+function preprocessVideoUrl(url: string): string {
+  if (!url) return '';
+  let trimmed = url.trim();
+
+  // If user pasted an iframe string, extract the src URL first!
+  if (trimmed.toLowerCase().includes('<iframe')) {
+    const srcMatch = trimmed.match(/src=["']([^"']+)["']/i);
+    if (srcMatch && srcMatch[1]) {
+      trimmed = srcMatch[1];
+    }
+  }
+
+  // Dropbox share links: convert to raw direct media streams
+  if (trimmed.toLowerCase().includes('dropbox.com')) {
+    if (trimmed.includes('?dl=')) {
+      trimmed = trimmed.replace(/\?dl=[01]/, '?raw=1');
+    } else if (trimmed.includes('&dl=')) {
+      trimmed = trimmed.replace(/&dl=[01]/, '&raw=1');
+    } else if (!trimmed.includes('?')) {
+      trimmed = trimmed + '?raw=1';
+    }
+  }
+
+  // Google Drive share links: convert to direct streamable UC url
+  if (trimmed.toLowerCase().includes('drive.google.com/file/d/')) {
+    const match = trimmed.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) {
+      trimmed = `https://docs.google.com/uc?export=download&id=${match[1]}`;
+    }
+  }
+
+  return trimmed;
+}
+
 export default function VideoManagement() {
   const navigate = useNavigate();
   const [videos, setVideos] = useState<Video[]>([]);
@@ -159,12 +194,53 @@ export default function VideoManagement() {
 
   const detectVideoDurationAndThumbnail = (fileOrUrl: File | string) => {
     setIsGeneratingThumbnail(true);
+    
+    let urlToLoad = '';
+    if (typeof fileOrUrl !== 'string') {
+      urlToLoad = URL.createObjectURL(fileOrUrl);
+    } else {
+      urlToLoad = preprocessVideoUrl(fileOrUrl);
+    }
+
+    if (!urlToLoad) {
+      setIsGeneratingThumbnail(false);
+      return;
+    }
+
     const videoElement = document.createElement('video');
-    videoElement.preload = 'auto';
+    
+    // To ensure full cross-browser loading capability (including iOS and Safari constraints),
+    // we attach the element off-screen to the DOM and force a load cycle.
+    videoElement.style.position = 'fixed';
+    videoElement.style.left = '-9999px';
+    videoElement.style.top = '-9999px';
+    videoElement.style.width = '320px';
+    videoElement.style.height = '180px';
+    videoElement.style.visibility = 'hidden';
     videoElement.muted = true;
     videoElement.playsInline = true;
+    videoElement.setAttribute('playsinline', 'true');
+    videoElement.setAttribute('webkit-playsinline', 'true');
     videoElement.crossOrigin = 'anonymous';
-    
+    videoElement.preload = 'auto';
+
+    document.body.appendChild(videoElement);
+
+    let hls: any = null;
+
+    const cleanup = () => {
+      try {
+        if (videoElement.parentNode) {
+          document.body.removeChild(videoElement);
+        }
+      } catch (domErr) {
+        // Safe catch if already removed
+      }
+      if (hls) {
+        hls.destroy();
+      }
+    };
+
     const setFormattedDuration = (dur: number) => {
       if (dur && isFinite(dur)) {
         const hrs = Math.floor(dur / 3600);
@@ -178,20 +254,6 @@ export default function VideoManagement() {
           formatted = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
         }
         setValue('duration', formatted);
-      }
-    };
-
-    let hls: any = null;
-    let urlToLoad = '';
-    if (typeof fileOrUrl !== 'string') {
-      urlToLoad = URL.createObjectURL(fileOrUrl);
-    } else {
-      urlToLoad = fileOrUrl;
-    }
-
-    const cleanup = () => {
-      if (hls) {
-        hls.destroy();
       }
     };
 
@@ -233,57 +295,66 @@ export default function VideoManagement() {
     };
 
     videoElement.onerror = () => {
+      console.warn("Video element failed to load source:", urlToLoad);
       setIsGeneratingThumbnail(false);
       cleanup();
     };
 
-    if (urlToLoad) {
-      const isM3U8 = urlToLoad.toLowerCase().includes('.m3u8');
-      if (isM3U8 && Hls.isSupported()) {
-        hls = new Hls();
-        hls.loadSource(urlToLoad);
-        hls.attachMedia(videoElement);
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          setTimeout(() => {
-            if (videoElement.duration && isFinite(videoElement.duration)) {
-              setFormattedDuration(videoElement.duration);
-            }
-            try {
-              const canvas = document.createElement('canvas');
-              canvas.width = 640;
-              canvas.height = 360;
-              const ctx = canvas.getContext('2d');
-              if (ctx) {
-                ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
-                canvas.toBlob((blob) => {
-                  if (blob) {
-                    setAutoThumbnailBlob(blob);
-                    const previewUrl = URL.createObjectURL(blob);
-                    setAutoThumbnailPreview(previewUrl);
-                    setValue('thumbnail', '(Auto-generated from Video)');
-                  }
-                  setIsGeneratingThumbnail(false);
-                }, 'image/jpeg', 0.85);
-              }
-            } catch (hlsErr) {
+    const isM3U8 = urlToLoad.toLowerCase().includes('.m3u8');
+    if (isM3U8 && Hls.isSupported()) {
+      hls = new Hls();
+      hls.loadSource(urlToLoad);
+      hls.attachMedia(videoElement);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        setTimeout(() => {
+          if (videoElement.duration && isFinite(videoElement.duration)) {
+            setFormattedDuration(videoElement.duration);
+          }
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = 640;
+            canvas.height = 360;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+              canvas.toBlob((blob) => {
+                if (blob) {
+                  setAutoThumbnailBlob(blob);
+                  const previewUrl = URL.createObjectURL(blob);
+                  setAutoThumbnailPreview(previewUrl);
+                  setValue('thumbnail', '(Auto-generated from Video)');
+                }
+                setIsGeneratingThumbnail(false);
+                cleanup();
+              }, 'image/jpeg', 0.85);
+            } else {
               setIsGeneratingThumbnail(false);
+              cleanup();
             }
-          }, 1500);
-        });
-      } else {
-        videoElement.src = urlToLoad;
-      }
+          } catch (hlsErr) {
+            setIsGeneratingThumbnail(false);
+            cleanup();
+          }
+        }, 1500);
+      });
+    } else {
+      videoElement.src = urlToLoad;
+      videoElement.load();
     }
   };
 
   useEffect(() => {
     if (watchedVideoUrl && (watchedVideoUrl.startsWith('http://') || watchedVideoUrl.startsWith('https://')) && watchedVideoUrl !== 'embed') {
+      // Don't auto-generate if we are editing and the videoUrl is unchanged from the original
+      if (editingVideo && watchedVideoUrl === editingVideo.videoUrl) {
+        return;
+      }
       const timer = setTimeout(() => {
         detectVideoDurationAndThumbnail(watchedVideoUrl);
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, [watchedVideoUrl]);
+  }, [watchedVideoUrl, editingVideo]);
 
   useEffect(() => {
     if (!isModalOpen) {
