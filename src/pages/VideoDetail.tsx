@@ -216,12 +216,14 @@ export default function VideoDetail() {
   const [showControls, setShowControls] = useState(true);
   const controlsTimeout = useRef<number | null>(null);
   const [videoError, setVideoError] = useState(false);
+  const [hasUpdatedDuration, setHasUpdatedDuration] = useState(false);
 
   const processedUrl = video ? preprocessVideoUrl(video.videoUrl) : '';
   const embedUrl = getEmbedUrl(processedUrl);
 
   useEffect(() => {
     if (!id) return;
+    setHasUpdatedDuration(false);
 
     const fetchVideoAndSettings = async () => {
       setLoading(true);
@@ -529,6 +531,31 @@ export default function VideoDetail() {
       setDuration(dur);
       if (dur > 0) {
         setProgress((current / dur) * 100);
+
+        // Proactively correct hardcoded durations "03:40" or "00:00" in the database
+        if (video && (video.duration === "03:40" || video.duration === "00:00" || !video.duration) && isFinite(dur) && !hasUpdatedDuration) {
+          setHasUpdatedDuration(true);
+          const formatted = formatTime(dur);
+          if (formatted !== video.duration) {
+            // Update local state
+            setVideo(prev => prev ? { ...prev, duration: formatted } : null);
+            // Update local storage and Firestore
+            try {
+              const docRef = doc(db, 'videos', video.id);
+              updateDoc(docRef, { duration: formatted }).catch(err => console.warn(err));
+              
+              // Also update localStorage so changes are immediate locally
+              const localData = localStorage.getItem('novastream_local_videos');
+              if (localData) {
+                const locals = JSON.parse(localData) as Video[];
+                const updated = locals.map(v => v.id === video.id ? { ...v, duration: formatted } : v);
+                localStorage.setItem('novastream_local_videos', JSON.stringify(updated));
+              }
+            } catch (err) {
+              console.warn("Stand-alone duration sync skipped", err);
+            }
+          }
+        }
       }
     }
   };

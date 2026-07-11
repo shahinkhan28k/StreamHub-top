@@ -14,6 +14,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { getStoredVideos, saveStoredVideo, deleteStoredVideo, subscribeStoredVideos } from '../../lib/videoStore';
 import AdminSidebar from '../../components/AdminSidebar';
 import { ChevronLeft } from 'lucide-react';
+import Hls from 'hls.js';
 
 // Preset High-Speed CDN Video Templates
 const CDN_PRESETS = [
@@ -141,6 +142,155 @@ export default function VideoManagement() {
   const currentCategoryObj = getCategoriesFromMenu().find((c: any) => c.id === watchedCategoryId);
   const hasSubmenus = currentCategoryObj && currentCategoryObj.subMenus && currentCategoryObj.subMenus.length > 0;
 
+  const watchedVideoUrl = watch('videoUrl');
+
+  const [autoThumbnailBlob, setAutoThumbnailBlob] = useState<Blob | null>(null);
+  const [autoThumbnailPreview, setAutoThumbnailPreview] = useState<string>('');
+  const [isGeneratingThumbnail, setIsGeneratingThumbnail] = useState(false);
+
+  const clearAutoThumbnail = () => {
+    if (autoThumbnailPreview) {
+      URL.revokeObjectURL(autoThumbnailPreview);
+    }
+    setAutoThumbnailBlob(null);
+    setAutoThumbnailPreview('');
+    setIsGeneratingThumbnail(false);
+  };
+
+  const detectVideoDurationAndThumbnail = (fileOrUrl: File | string) => {
+    setIsGeneratingThumbnail(true);
+    const videoElement = document.createElement('video');
+    videoElement.preload = 'auto';
+    videoElement.muted = true;
+    videoElement.playsInline = true;
+    videoElement.crossOrigin = 'anonymous';
+    
+    const setFormattedDuration = (dur: number) => {
+      if (dur && isFinite(dur)) {
+        const hrs = Math.floor(dur / 3600);
+        const mins = Math.floor((dur % 3600) / 60);
+        const secs = Math.floor(dur % 60);
+        
+        let formatted = '';
+        if (hrs > 0) {
+          formatted = `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        } else {
+          formatted = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+        setValue('duration', formatted);
+      }
+    };
+
+    let hls: any = null;
+    let urlToLoad = '';
+    if (typeof fileOrUrl !== 'string') {
+      urlToLoad = URL.createObjectURL(fileOrUrl);
+    } else {
+      urlToLoad = fileOrUrl;
+    }
+
+    const cleanup = () => {
+      if (hls) {
+        hls.destroy();
+      }
+    };
+
+    videoElement.onloadedmetadata = () => {
+      setFormattedDuration(videoElement.duration);
+      // Seek to an interesting frame: 3 seconds or 10% of video
+      const seekTime = Math.min(3, videoElement.duration / 2 || 1);
+      videoElement.currentTime = seekTime;
+    };
+
+    videoElement.onseeked = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = videoElement.videoWidth || 640;
+        canvas.height = videoElement.videoHeight || 360;
+        
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+          canvas.toBlob((blob) => {
+            if (blob) {
+              setAutoThumbnailBlob(blob);
+              const previewUrl = URL.createObjectURL(blob);
+              setAutoThumbnailPreview(previewUrl);
+              setValue('thumbnail', '(Auto-generated from Video)');
+            }
+            setIsGeneratingThumbnail(false);
+            cleanup();
+          }, 'image/jpeg', 0.85);
+        } else {
+          setIsGeneratingThumbnail(false);
+          cleanup();
+        }
+      } catch (err) {
+        console.warn("Canvas capture failed:", err);
+        setIsGeneratingThumbnail(false);
+        cleanup();
+      }
+    };
+
+    videoElement.onerror = () => {
+      setIsGeneratingThumbnail(false);
+      cleanup();
+    };
+
+    if (urlToLoad) {
+      const isM3U8 = urlToLoad.toLowerCase().includes('.m3u8');
+      if (isM3U8 && Hls.isSupported()) {
+        hls = new Hls();
+        hls.loadSource(urlToLoad);
+        hls.attachMedia(videoElement);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          setTimeout(() => {
+            if (videoElement.duration && isFinite(videoElement.duration)) {
+              setFormattedDuration(videoElement.duration);
+            }
+            try {
+              const canvas = document.createElement('canvas');
+              canvas.width = 640;
+              canvas.height = 360;
+              const ctx = canvas.getContext('2d');
+              if (ctx) {
+                ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+                canvas.toBlob((blob) => {
+                  if (blob) {
+                    setAutoThumbnailBlob(blob);
+                    const previewUrl = URL.createObjectURL(blob);
+                    setAutoThumbnailPreview(previewUrl);
+                    setValue('thumbnail', '(Auto-generated from Video)');
+                  }
+                  setIsGeneratingThumbnail(false);
+                }, 'image/jpeg', 0.85);
+              }
+            } catch (hlsErr) {
+              setIsGeneratingThumbnail(false);
+            }
+          }, 1500);
+        });
+      } else {
+        videoElement.src = urlToLoad;
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (watchedVideoUrl && (watchedVideoUrl.startsWith('http://') || watchedVideoUrl.startsWith('https://')) && watchedVideoUrl !== 'embed') {
+      const timer = setTimeout(() => {
+        detectVideoDurationAndThumbnail(watchedVideoUrl);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [watchedVideoUrl]);
+
+  useEffect(() => {
+    if (!isModalOpen) {
+      clearAutoThumbnail();
+    }
+  }, [isModalOpen]);
+
   const fetchVideos = async () => {
     setLoading(true);
     try {
@@ -172,9 +322,10 @@ export default function VideoManagement() {
     };
   }, []);
 
-  const uploadFile = async (file: File, path: string): Promise<string> => {
+  const uploadFile = async (file: File | Blob, path: string, fileName?: string): Promise<string> => {
     return new Promise((resolve, reject) => {
-      const storageRef = ref(storage, `${path}/${Date.now()}_${file.name}`);
+      const name = fileName || (file as File).name || `auto_thumbnail_${Date.now()}.jpg`;
+      const storageRef = ref(storage, `${path}/${Date.now()}_${name}`);
       const uploadTask = uploadBytesResumable(storageRef, file);
 
       uploadTask.on(
@@ -272,10 +423,16 @@ export default function VideoManagement() {
           console.error("Thumbnail upload error:", uploadErr);
           throw new Error(`STORAGE_THUMBNAIL_FAILED: ${uploadErr?.message || 'Access Denied'}`);
         }
+      } else if ((!thumbnailUrl || thumbnailUrl === '(Auto-generated from Video)') && autoThumbnailBlob) {
+        try {
+          thumbnailUrl = await uploadFile(autoThumbnailBlob, 'thumbnails', 'auto_thumbnail.jpg');
+        } catch (uploadErr: any) {
+          console.error("Auto thumbnail upload error:", uploadErr);
+        }
       }
 
       // If no thumbnail is specified or uploaded, use a premium cinema fallback placeholder
-      if (!thumbnailUrl) {
+      if (!thumbnailUrl || thumbnailUrl === '(Auto-generated from Video)') {
         thumbnailUrl = "https://images.unsplash.com/photo-1574375927938-d5a98e8edd86?q=80&w=800";
       }
 
@@ -288,7 +445,7 @@ export default function VideoManagement() {
         thumbnail: thumbnailUrl,
         categoryId: data.categoryId,
         subCategoryId: data.subCategoryId || '',
-        duration: data.duration || "03:40",
+        duration: data.duration || "00:00",
         tags: typeof data.tags === 'string' ? data.tags.split(',').map((t: string) => t.trim()).filter(Boolean) : data.tags || [],
         featured: !!data.featured,
         locked: !!data.locked,
@@ -716,6 +873,37 @@ export default function VideoManagement() {
                   <label className="text-xs font-bold text-neutral-400 uppercase tracking-widest">Thumbnail (URL or Upload)</label>
                   <div className="space-y-2">
                     <input {...register('thumbnail')} className="w-full bg-neutral-800 border border-white/5 rounded-xl py-2.5 px-3 focus:outline-none focus:border-rose-500 transition-colors text-xs" placeholder="https://..." />
+                    
+                    {isGeneratingThumbnail && (
+                      <div className="flex items-center gap-2 text-xs text-rose-400 font-semibold animate-pulse py-1">
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>অটোমেটিক থাম্বনেল তৈরি হচ্ছে... (Generating automatic thumbnail...)</span>
+                      </div>
+                    )}
+
+                    {autoThumbnailPreview && (
+                      <div className="p-2.5 bg-neutral-900 border border-white/5 rounded-xl flex items-center gap-3">
+                        <img src={autoThumbnailPreview} alt="Auto Preview" className="w-20 h-12 object-cover rounded-lg border border-white/10" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">Auto-Generated Thumbnail</p>
+                          <p className="text-xs text-emerald-400 font-semibold flex items-center gap-1 mt-0.5">
+                            <Check className="w-3.5 h-3.5" /> ভিডিও থেকে অটোমেটিক যুক্ত হয়েছে
+                          </p>
+                        </div>
+                        <button 
+                          type="button" 
+                          onClick={() => {
+                            clearAutoThumbnail();
+                            setValue('thumbnail', '');
+                          }}
+                          className="p-1 hover:bg-white/5 rounded text-neutral-400 hover:text-white transition-colors"
+                          title="Reset"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+
                     <div className="relative group">
                       <input 
                         type="file" 
@@ -739,7 +927,7 @@ export default function VideoManagement() {
                         className="w-full py-2 bg-neutral-800/40 border border-dashed border-white/10 rounded-xl text-xs font-bold flex items-center justify-center gap-2 hover:bg-neutral-800 transition-colors"
                       >
                         <ImageIcon className="w-4 h-4 text-neutral-400" />
-                        {thumbFileRef.current?.files?.[0] ? thumbFileRef.current.files[0].name : 'Choose Thumbnail File'}
+                        {thumbFileRef.current?.files?.[0] ? thumbFileRef.current.files[0].name : 'Choose Custom Thumbnail File (Optional)'}
                       </button>
                     </div>
                     {progress.thumbnails !== undefined && (
@@ -783,6 +971,7 @@ export default function VideoManagement() {
                                 );
                               }
                               setValue('videoUrl', file.name);
+                              detectVideoDurationAndThumbnail(file);
                             }
                           }}
                         />
