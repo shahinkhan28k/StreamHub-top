@@ -30,7 +30,7 @@ export default function Footer() {
               <div className="w-8 h-8 bg-rose-600 rounded-lg flex items-center justify-center">
                 <Play className="w-5 h-5 text-white fill-current" />
               </div>
-              <span className="text-xl font-bold tracking-tight">{settings?.siteName || 'StreamHub'}</span>
+              <span className="text-xl font-bold tracking-tight">{settings?.siteName || 'Deshi Hubx'}</span>
             </Link>
             <p className="text-neutral-400 text-sm leading-relaxed mb-6">
               Experience the best in streaming. Movies, sports, gaming, and more - all in one place with premium quality and performance.
@@ -108,7 +108,7 @@ export default function Footer() {
 
         <div className="pt-8 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-4">
           <p className="text-neutral-500 text-xs">
-            {settings?.footerText || `© ${new Date().getFullYear()} StreamHub. All rights reserved.`}
+            {settings?.footerText || `© ${new Date().getFullYear()} Deshi Hubx. All rights reserved.`}
           </p>
           <div className="flex gap-6 text-xs text-neutral-500">
             <a href="#" className="hover:text-white transition-colors">Privacy</a>

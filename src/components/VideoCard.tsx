@@ -11,19 +11,18 @@ interface VideoCardProps {
 
 const VideoCard: React.FC<{ video: Video }> = ({ video }) => {
   return (
-    <motion.div
-      whileHover={{ y: -4 }}
-      className="group relative bg-neutral-900 rounded-xl overflow-hidden border border-white/5 hover:border-rose-500/30 transition-all shadow-lg"
+    <div
+      className="group relative bg-neutral-900 rounded-xl overflow-hidden border border-white/5 md:hover:border-rose-500/30 transition-all duration-300 shadow-lg md:hover:-translate-y-1"
     >
       <Link to={`/video/${video.id}`}>
         <div className="relative aspect-video overflow-hidden">
           <img
             src={video.thumbnail}
             alt={video.title}
-            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+            className="w-full h-full object-cover transition-transform duration-500 md:group-hover:scale-110"
             loading="lazy"
           />
-          <div className="absolute inset-0 bg-black/20 group-hover:bg-black/0 transition-colors" />
+          <div className="absolute inset-0 bg-black/20 md:group-hover:bg-black/0 transition-colors" />
           
           {video.locked && (
             <div className="absolute top-2 right-2 bg-neutral-950/80 backdrop-blur-md p-1.5 rounded-full border border-white/10">
@@ -71,7 +70,7 @@ const VideoCard: React.FC<{ video: Video }> = ({ video }) => {
           </div>
         </div>
       </Link>
-    </motion.div>
+    </div>
   );
 };
 

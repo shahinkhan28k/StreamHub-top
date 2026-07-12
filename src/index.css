@@ -12,10 +12,21 @@
     padding: 0;
     box-sizing: border-box;
     -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+    text-size-adjust: 100%;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* Prevent blue flash selection highlights on mobile tap */
+  a, button, [role="button"], select, input, textarea {
+    -webkit-tap-highlight-color: transparent;
+    outline: none;
   }
 
   body {
     @apply antialiased text-neutral-200 bg-neutral-950;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   /* Custom Scrollbar */

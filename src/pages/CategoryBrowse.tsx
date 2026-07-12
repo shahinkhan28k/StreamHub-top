@@ -56,7 +56,7 @@ export default function CategoryBrowse() {
             <h1 className="text-4xl font-bold tracking-tight capitalize">
               {subId ? `${id} › ${subId}` : id}
             </h1>
-            <p className="text-neutral-400 text-sm">Discover the best {subId || id} content on StreamHub</p>
+            <p className="text-neutral-400 text-sm">Discover the best {subId || id} content on Deshi Hubx</p>
           </div>
         </div>
 

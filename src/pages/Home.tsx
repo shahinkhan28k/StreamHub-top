@@ -12,7 +12,7 @@ import AdRenderer from '../components/AdRenderer';
 import { useAuth } from '../context/AuthContext';
 
 export default function Home() {
-  useSEO('Home - Premium Video Streaming', 'Stream the latest movies, sports, and gaming content on StreamHub.');
+  useSEO('Home - Deshi Hubx', 'Stream premium videos and entertainment content on Deshi Hubx - Premium Collection.');
   const { isAdmin } = useAuth();
   const [featuredVideo, setFeaturedVideo] = useState<Video | null>(null);
   const [trendingVideos, setTrendingVideos] = useState<Video[]>([]);
@@ -156,7 +156,7 @@ export default function Home() {
 
       {/* Hero Banner */}
       {featuredVideo && (
-        <section className="relative h-[80vh] w-full overflow-hidden">
+        <section className="relative h-[48vh] sm:h-[60vh] md:h-[80vh] w-full overflow-hidden">
           <div className="absolute inset-0">
             <img 
               src={featuredVideo.thumbnail} 

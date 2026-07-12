@@ -273,10 +273,10 @@ export default function VideoDetail() {
 
         if (!settings) {
           settings = {
-            siteName: 'StreamHub',
+            siteName: 'Deshi Hubx',
             primaryColor: '#e11d48',
-            footerText: '© 2026 StreamHub. All rights reserved.',
-            contactEmail: 'admin@streamhub.io',
+            footerText: '© 2026 Deshi Hubx. All rights reserved.',
+            contactEmail: 'admin@deshihubx.com',
             socialLinks: { twitter: '', facebook: '', instagram: '', youtube: '' },
             featureToggles: { lockedVideoScreen: true, darkMode: true },
             adConfig: defaultAdConfig

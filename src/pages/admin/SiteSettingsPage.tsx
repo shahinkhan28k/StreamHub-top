@@ -102,14 +102,14 @@ export default function SiteSettingsPage() {
         ];
         setMenuItems(defaultMenu);
         reset({
-          siteName: 'StreamHub',
+          siteName: 'Deshi Hubx',
           primaryColor: '#e11d48',
-          footerText: '© 2026 StreamHub. All rights reserved.',
-          contactEmail: 'admin@streamhub.io',
+          footerText: '© 2026 Deshi Hubx. All rights reserved.',
+          contactEmail: 'admin@deshihubx.com',
           socialLinks: { twitter: '', facebook: '', instagram: '', youtube: '' },
           supportConfig: {
-            telegramUrl: 'https://t.me/streamhub_support',
-            facebookUrl: 'https://facebook.com/streamhub',
+            telegramUrl: 'https://t.me/deshihubx_support',
+            facebookUrl: 'https://facebook.com/deshihubx',
             showTelegramWidget: true,
             widgetMessage: 'যেকোনো প্রয়োজনে আমাদের সাপোর্ট টিমের সাথে যোগাযোগ করুন।'
           },
@@ -148,10 +148,21 @@ export default function SiteSettingsPage() {
 
   const addMenuItem = () => {
     if (!newMenuLabel.trim()) return;
+    
+    let link = newMenuLink.trim();
+    if (!link) {
+      // Auto-generate correct category link from label
+      const slug = newMenuLabel.toLowerCase().trim().replace(/[^a-zA-Z0-9\u0980-\u09FF]+/g, '-');
+      link = `/category/${slug}`;
+    } else if (!link.startsWith('/') && !link.startsWith('http://') && !link.startsWith('https://')) {
+      // If they typed something like "movies" or "sports", convert to "/category/sports"
+      link = `/category/${link.toLowerCase().replace(/[^a-zA-Z0-9\u0980-\u09FF]+/g, '-')}`;
+    }
+
     const newItem: MenuItem = {
       id: Date.now().toString(),
       label: newMenuLabel.trim(),
-      link: newMenuLink.trim() || '#',
+      link: link,
       subMenus: []
     };
     setMenuItems([...menuItems, newItem]);
@@ -165,14 +176,31 @@ export default function SiteSettingsPage() {
 
   const addSubMenuItem = (menuId: string) => {
     const label = newSubMenuLabel[menuId]?.trim();
-    const link = newSubMenuLink[menuId]?.trim();
+    let link = newSubMenuLink[menuId]?.trim() || '';
     if (!label) return;
+
+    const parentItem = menuItems.find(item => item.id === menuId);
+    if (!link && parentItem) {
+      const subSlug = label.toLowerCase().replace(/[^a-zA-Z0-9\u0980-\u09FF]+/g, '-');
+      if (parentItem.link.startsWith('/category/')) {
+        link = `${parentItem.link}/${subSlug}`;
+      } else {
+        link = `/category/${parentItem.label.toLowerCase().replace(/[^a-zA-Z0-9\u0980-\u09FF]+/g, '-')}/${subSlug}`;
+      }
+    } else if (link && !link.startsWith('/') && !link.startsWith('http://') && !link.startsWith('https://')) {
+      const subSlug = link.toLowerCase().replace(/[^a-zA-Z0-9\u0980-\u09FF]+/g, '-');
+      if (parentItem && parentItem.link.startsWith('/category/')) {
+        link = `${parentItem.link}/${subSlug}`;
+      } else {
+        link = `/category/category-slug/${subSlug}`;
+      }
+    }
 
     setMenuItems(menuItems.map(item => {
       if (item.id === menuId) {
         return {
           ...item,
-          subMenus: [...(item.subMenus || []), { label, link: link || '#' }]
+          subMenus: [...(item.subMenus || []), { label, link }]
         };
       }
       return item;

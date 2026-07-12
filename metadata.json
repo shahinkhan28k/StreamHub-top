@@ -1,6 +1,6 @@
 {
-  "name": "Remix: StreamHub",
-  "description": "A modern, responsive video streaming platform with admin controls, authentication, and premium UI.",
+  "name": "Deshi Hubx - Premium Collection",
+  "description": "Deshi Hubx offers a premium video streaming collection with modern, fast and fully responsive user experience.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

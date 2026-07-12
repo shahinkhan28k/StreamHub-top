@@ -64,7 +64,7 @@ export default function Navbar() {
               <div className="w-8 h-8 bg-rose-600 rounded-lg flex items-center justify-center">
                 <Play className="w-5 h-5 text-white fill-current" />
               </div>
-              <span className="text-xl font-bold tracking-tight">StreamHub</span>
+              <span className="text-xl font-bold tracking-tight">Deshi Hubx</span>
             </Link>
 
             <div className="hidden md:flex items-center gap-6 text-sm font-medium text-neutral-400">

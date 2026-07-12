@@ -122,7 +122,7 @@ export default function VideoManagement() {
     }
     if (link.startsWith('/category/')) {
       const parts = link.replace('/category/', '').split('/');
-      return parts[0] || fallbackLabel.toLowerCase().trim().replace(/[^a-zA-Z0-9\u0980-\u09FF]+/g, '-');
+      return (parts[0] || '').toLowerCase().trim().replace(/[^a-zA-Z0-9\u0980-\u09FF]+/g, '-') || fallbackLabel.toLowerCase().trim().replace(/[^a-zA-Z0-9\u0980-\u09FF]+/g, '-');
     }
     return link.toLowerCase().trim().replace(/[^a-zA-Z0-9\u0980-\u09FF]+/g, '-');
   };
@@ -131,7 +131,7 @@ export default function VideoManagement() {
     if (link.startsWith('/category/')) {
       const parts = link.replace('/category/', '').split('/');
       if (parts.length > 1) {
-        return parts[1];
+        return parts[1].toLowerCase().trim().replace(/[^a-zA-Z0-9\u0980-\u09FF]+/g, '-');
       }
     }
     return fallbackLabel.toLowerCase().trim().replace(/[^a-zA-Z0-9\u0980-\u09FF]+/g, '-');

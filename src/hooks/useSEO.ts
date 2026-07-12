@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 
 export const useSEO = (title: string, description?: string) => {
   useEffect(() => {
-    document.title = `${title} | StreamHub`;
+    document.title = `${title} | Deshi Hubx`;
     if (description) {
       const meta = document.querySelector('meta[name="description"]');
       if (meta) {

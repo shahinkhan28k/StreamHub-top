@@ -50,7 +50,7 @@ export default function Signup() {
       >
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold mb-2">Create Account</h1>
-          <p className="text-neutral-400 text-sm">Join the StreamHub community</p>
+          <p className="text-neutral-400 text-sm">Join the Deshi Hubx community</p>
         </div>
 
         {error && (

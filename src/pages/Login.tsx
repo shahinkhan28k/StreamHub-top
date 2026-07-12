@@ -48,7 +48,7 @@ export default function Login() {
       >
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold mb-2">Welcome Back</h1>
-          <p className="text-neutral-400 text-sm">Log in to your StreamHub account</p>
+          <p className="text-neutral-400 text-sm">Log in to your Deshi Hubx account</p>
         </div>
 
         {error && (
