@@ -88,6 +88,17 @@ function preprocessVideoUrl(url: string): string {
     }
   }
 
+  // XNXX and XVideos Links Support: convert to direct embedframe
+  if (trimmed.toLowerCase().includes('xnxx.com') || trimmed.toLowerCase().includes('xvideos.com')) {
+    const domain = trimmed.toLowerCase().includes('xnxx.com') ? 'xnxx.com' : 'xvideos.com';
+    if (!trimmed.includes('/embedframe/')) {
+      const adultMatch = trimmed.match(/video-([a-zA-Z0-9]+)/i);
+      if (adultMatch && adultMatch[1]) {
+        trimmed = `https://www.${domain}/embedframe/${adultMatch[1]}`;
+      }
+    }
+  }
+
   return trimmed;
 }
 
@@ -228,7 +239,15 @@ export default function VideoManagement() {
 
     let hls: any = null;
 
+    // Safety timeout of 5 seconds to prevent infinite loading state
+    const safetyTimeout = setTimeout(() => {
+      console.warn("Video thumbnail/duration generation timed out.");
+      setIsGeneratingThumbnail(false);
+      cleanup();
+    }, 5000);
+
     const cleanup = () => {
+      clearTimeout(safetyTimeout);
       try {
         if (videoElement.parentNode) {
           document.body.removeChild(videoElement);
@@ -399,19 +418,48 @@ export default function VideoManagement() {
       const storageRef = ref(storage, `${path}/${Date.now()}_${name}`);
       const uploadTask = uploadBytesResumable(storageRef, file);
 
+      // Add a watchdog timer (e.g. 10 seconds) to prevent infinite hanging at 0%
+      let lastBytesTransferred = 0;
+      let lastProgressTime = Date.now();
+
+      const watchdogInterval = setInterval(() => {
+        const now = Date.now();
+        // If 10 seconds have passed without any bytes transferred, cancel the task and reject
+        if (now - lastProgressTime > 10000 && lastBytesTransferred === 0) {
+          clearInterval(watchdogInterval);
+          try {
+            uploadTask.cancel();
+          } catch (cancelErr) {
+            console.error("Failed to cancel upload task:", cancelErr);
+          }
+          reject(new Error("STORAGE_VIDEO_FAILED: TIMEOUT - Upload is stuck at 0%. This usually means Firebase Storage is not enabled in your Firebase Console, or the bucket rules block uploads."));
+        }
+      }, 2000);
+
       uploadTask.on(
         'state_changed',
         (snapshot) => {
+          const bytes = snapshot.bytesTransferred;
+          if (bytes > lastBytesTransferred) {
+            lastBytesTransferred = bytes;
+            lastProgressTime = Date.now();
+          }
           const p = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
           setProgress((prev) => ({ ...prev, [path]: Math.round(p) }));
         },
         (error) => {
+          clearInterval(watchdogInterval);
           console.error(`Upload error for ${path}:`, error);
           reject(error);
         },
         async () => {
-          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-          resolve(downloadURL);
+          clearInterval(watchdogInterval);
+          try {
+            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+            resolve(downloadURL);
+          } catch (urlErr) {
+            reject(urlErr);
+          }
         }
       );
     });
@@ -543,15 +591,15 @@ export default function VideoManagement() {
       
       if (errMsg.includes("STORAGE_VIDEO_FAILED") || errMsg.includes("STORAGE_THUMBNAIL_FAILED")) {
         alert(
-          "❌ Firebase Storage Upload Blocked / Failed!\n\n" +
-          "This issue happens because Firebase Storage is not activated in your project, or the security rules block unauthenticated uploads.\n\n" +
-          "HOW TO SOLVE PERMANENTLY:\n" +
-          "1. Go to your Firebase Console (console.firebase.google.com)\n" +
-          "2. Click 'Storage' in the left sidebar under Build.\n" +
-          "3. Click 'Get Started' to enable the storage bucket.\n" +
-          "4. Go to the 'Rules' tab and change 'allow read, write: if false;' to 'allow read, write: if true;' (or customize for authenticated users) so anyone can upload.\n\n" +
-          "💡 INSTANT WORKAROUND (Highly Recommended):\n" +
-          "Instead of uploading files, copy any direct MP4 link (from Google Drive, Dropbox, free CDNs, or YouTube) and paste it into the 'Video URL' input! It will deploy in 0.1 seconds with NO loading/processing time!"
+          "❌ ফায়ারবেস স্টোরেজ আপলোড ব্যর্থ হয়েছে! (Firebase Storage Upload Failed)\n\n" +
+          "এই সমস্যাটি হওয়ার প্রধান কারণ আপনার ফায়ারবেস কনসোলে 'Firebase Storage' এখনো এক্টিভেট করা হয়নি, অথবা এর সিকিউরিটি রুলস (Security Rules) ফাইল আপলোড করা ব্লক করে রেখেছে।\n\n" +
+          "✅ স্থায়ীভাবে সমাধান করার সহজ উপায়:\n" +
+          "১. ফায়ারবেস কনসোলে যান: console.firebase.google.com\n" +
+          "২. বাম পাশের মেনুতে 'Build' এর অধীনে 'Storage' এ ক্লিক করুন।\n" +
+          "৩. 'Get Started' এ ক্লিক করে স্টোরেজ বাকেটটি চালু করুন।\n" +
+          "৪. 'Rules' ট্যাবে গিয়ে 'allow read, write: if false;' পরিবর্তন করে 'allow read, write: if true;' (অথবা custom auth) সেট করুন এবং Publish করুন।\n\n" +
+          "💡 তাত্ক্ষণিক সমাধান (সবচেয়ে বেশি রেকমেন্ডেড):\n" +
+          "ভিডিও ফাইল সরাসরি আপলোড না করে, যেকোনো ভিডিওর সরাসরি লিংক (যেমন Google Drive, Dropbox, free CDNs, বা YouTube Link) কপি করে 'Video URL' বক্সে পেস্ট করুন! এটি কোনো আপলোড টাইম ছাড়াই তাৎক্ষণিকভাবে মাত্র ১ সেকেন্ডে যুক্ত হয়ে যাবে!"
         );
       } else {
         alert("Error saving video: " + errMsg);
@@ -1150,7 +1198,13 @@ export default function VideoManagement() {
                   {uploading ? (
                     <>
                       <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                      Uploading Media...
+                      <span>
+                        {progress.videos !== undefined && progress.videos < 100
+                          ? `ভিডিও আপলোড হচ্ছে... (${progress.videos}%)`
+                          : progress.thumbnails !== undefined && progress.thumbnails < 100
+                          ? `থাম্বনেল আপলোড হচ্ছে... (${progress.thumbnails}%)`
+                          : "সংরক্ষণ করা হচ্ছে..."}
+                      </span>
                     </>
                   ) : (
                     editingVideo ? 'Update Stream Asset' : 'Deploy Stream Asset'
@@ -1159,6 +1213,87 @@ export default function VideoManagement() {
               </div>
             </form>
           </motion.div>
+        </div>
+      )}
+
+      {/* High-Fidelity Fullscreen Upload Progress Overlay */}
+      {uploading && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-neutral-950/95 backdrop-blur-xl">
+          <div className="w-full max-w-md bg-neutral-900 border border-white/10 rounded-3xl p-6 text-center space-y-6 shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-1 bg-rose-500 animate-pulse" />
+            
+            {/* Spinning/pulsing upload logo */}
+            <div className="w-16 h-16 bg-rose-500/10 rounded-full flex items-center justify-center mx-auto text-rose-500 relative">
+              <Upload className="w-8 h-8 animate-bounce" />
+              <div className="absolute inset-0 rounded-full border-2 border-rose-500/30 animate-ping" />
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-lg font-black text-white">মিডিয়া ফাইল আপলোড হচ্ছে...</h3>
+              <p className="text-xs text-neutral-400 leading-relaxed">
+                দয়া করে এই পেজটি বন্ধ করবেন না বা রিলোড করবেন না। আপনার ফাইলগুলো ক্লাউডে আপলোড করা হচ্ছে।
+              </p>
+            </div>
+
+            <div className="space-y-4 text-left">
+              {/* Video Progress Bar */}
+              {videoFileRef.current?.files?.[0] && (
+                <div className="p-3 bg-neutral-950/60 rounded-2xl border border-white/5 space-y-2">
+                  <div className="flex items-center justify-between text-xs font-bold">
+                    <span className="text-neutral-300 flex items-center gap-1.5 truncate max-w-[180px]">
+                      <FileVideo className="w-4 h-4 text-rose-500 flex-shrink-0" />
+                      {videoFileRef.current.files[0].name}
+                    </span>
+                    <span className="text-rose-400 font-mono">
+                      {progress.videos !== undefined ? `${progress.videos}%` : 'অপেক্ষা করা হচ্ছে...'}
+                    </span>
+                  </div>
+                  
+                  {/* File Size details */}
+                  <div className="text-[10px] text-neutral-500">
+                    আকার: {(videoFileRef.current.files[0].size / (1024 * 1024)).toFixed(2)} MB
+                  </div>
+
+                  <div className="h-2 bg-neutral-800 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-rose-500 transition-all duration-300 rounded-full" 
+                      style={{ width: `${progress.videos || 0}%` }} 
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Thumbnail Progress Bar */}
+              {(thumbFileRef.current?.files?.[0] || autoThumbnailBlob) && (
+                <div className="p-3 bg-neutral-950/60 rounded-2xl border border-white/5 space-y-2">
+                  <div className="flex items-center justify-between text-xs font-bold">
+                    <span className="text-neutral-300 flex items-center gap-1.5 truncate max-w-[180px]">
+                      <ImageIcon className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                      {thumbFileRef.current?.files?.[0] ? thumbFileRef.current.files[0].name : 'Auto-generated Thumbnail'}
+                    </span>
+                    <span className="text-emerald-400 font-mono">
+                      {progress.thumbnails !== undefined ? `${progress.thumbnails}%` : 'অপেক্ষা করা হচ্ছে...'}
+                    </span>
+                  </div>
+
+                  <div className="h-2 bg-neutral-800 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-emerald-500 transition-all duration-300 rounded-full" 
+                      style={{ width: `${progress.thumbnails || 0}%` }} 
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Slow/Failed Upload Assist Note */}
+            <div className="p-3.5 bg-amber-500/5 border border-amber-500/10 rounded-2xl text-left text-[11px] text-amber-500/95 leading-relaxed flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold">টিপস (Tips):</span> যদি আপনার ইন্টারনেট ধীরগতির হয় বা কোনো সমস্যা থাকে, তবে সরাসরি ভিডিওর লিংক (যেমন Google Drive বা Dropbox লিংক) উপরের ইনপুট বক্সে পেস্ট করতে পারেন। এতে কোনো আপলোড টাইম ছাড়াই তাৎক্ষণিকভাবে ভিডিও যুক্ত হয়ে যাবে!
+              </div>
+            </div>
+          </div>
         </div>
       )}
         </div>

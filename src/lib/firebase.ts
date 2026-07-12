@@ -9,6 +9,14 @@ export const auth = getAuth(app);
 export const db = getFirestore(app, (firebaseConfig as any).firestoreDatabaseId);
 export const storage = getStorage(app);
 
+// Prevent uploads from hanging infinitely on permission or network blocks by limiting retry duration
+try {
+  storage.maxUploadRetryTime = 15000;    // 15 seconds max upload retry
+  storage.maxOperationRetryTime = 15000; // 15 seconds max operation retry
+} catch (e) {
+  console.warn("Failed to set storage retry limits:", e);
+}
+
 // Connection test
 async function testConnection() {
   try {

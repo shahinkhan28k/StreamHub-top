@@ -178,6 +178,18 @@ function getEmbedUrl(url: string) {
     return trimmed;
   }
 
+  // XNXX and XVideos Links Support
+  if (trimmed.toLowerCase().includes('xnxx.com') || trimmed.toLowerCase().includes('xvideos.com')) {
+    const domain = trimmed.toLowerCase().includes('xnxx.com') ? 'xnxx.com' : 'xvideos.com';
+    if (trimmed.includes('/embedframe/')) {
+      return trimmed;
+    }
+    const adultMatch = trimmed.match(/video-([a-zA-Z0-9]+)/i);
+    if (adultMatch && adultMatch[1]) {
+      return `https://www.${domain}/embedframe/${adultMatch[1]}`;
+    }
+  }
+
   // If it is NOT a direct video URL, treat it as a generic embed page
   if (!isDirectVideoUrl(trimmed)) {
     return trimmed;
