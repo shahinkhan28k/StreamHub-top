@@ -98,4 +98,45 @@ img {
   -webkit-transform: translateZ(0);
 }
 
+/* 
+  Responsive Ad Renderer styling.
+  Ensures banners/iframes/scripts from 3rd party networks are beautifully 
+  centered and dynamically scaled on mobile screens, avoiding overflows.
+*/
+.ad-renderer-container {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  align-items: center !important;
+  text-align: center !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  overflow: hidden !important;
+}
+
+.ad-renderer-container iframe,
+.ad-renderer-container img,
+.ad-renderer-container ins,
+.ad-renderer-container a,
+.ad-renderer-container svg,
+.ad-renderer-container embed {
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+/* For fixed-width elements like 728x90 iframes on small screens */
+@media (max-width: 768px) {
+  .ad-renderer-container iframe,
+  .ad-renderer-container ins,
+  .ad-renderer-container embed {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+}
+
+
 
