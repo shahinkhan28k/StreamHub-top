@@ -84,6 +84,8 @@ export default function Home() {
     );
   }
 
+  const isDarkMode = siteSettings?.featureToggles?.darkMode !== false;
+
   return (
     <div className="space-y-12">
       {/* Custom Ads Spot - Homepage Top */}
@@ -109,67 +111,76 @@ export default function Home() {
 
       {/* Hero Banner */}
       {featuredVideo && (
-        <section className="relative h-[48vh] sm:h-[60vh] md:h-[80vh] w-full overflow-hidden">
-          <div className="absolute inset-0">
-            <img 
-              src={featuredVideo.thumbnail} 
-              alt={featuredVideo.title}
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/40 to-transparent" />
-            <div className="absolute inset-0 bg-gradient-to-r from-neutral-950 via-neutral-950/20 to-transparent" />
-          </div>
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 sm:mt-6">
+          <div className={`relative min-h-[420px] h-[55vh] sm:h-[60vh] md:h-[65vh] lg:h-[70vh] w-full rounded-3xl overflow-hidden shadow-2xl transition-all ${isDarkMode ? 'shadow-black/40 border border-white/5 bg-neutral-900' : 'shadow-slate-200 border border-slate-200/60 bg-white'}`}>
+            {/* Background Image with Ken Burns / Zoom Effect on hover */}
+            <div className="absolute inset-0 select-none pointer-events-none overflow-hidden">
+              <img 
+                src={featuredVideo.thumbnail} 
+                alt={featuredVideo.title}
+                className="w-full h-full object-cover transition-transform duration-[6000ms] hover:scale-105"
+              />
+              {/* Dynamic Gradient Overlays matching Light / Dark Theme */}
+              <div className={`absolute inset-0 bg-gradient-to-t ${isDarkMode ? 'from-neutral-950 via-neutral-950/65 to-transparent' : 'from-white via-white/70 to-transparent'} z-10`} />
+              <div className={`absolute inset-0 bg-gradient-to-r ${isDarkMode ? 'from-neutral-950/80 via-neutral-950/30 to-transparent' : 'from-white/85 via-white/35 to-transparent'} z-10 hidden md:block`} />
+            </div>
 
-          <div className="absolute bottom-0 left-0 w-full p-8 md:p-16 lg:p-24">
-            <div className="max-w-3xl space-y-6">
-              <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-600/20 border border-rose-600/30 text-rose-500 text-xs font-bold uppercase tracking-widest"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                Featured Content
-              </motion.div>
-              
-              <motion.h1 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-                className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight leading-tight"
-              >
-                {featuredVideo.title}
-              </motion.h1>
-              
-              <motion.p 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="text-lg text-neutral-300 line-clamp-3 md:line-clamp-none max-w-2xl"
-              >
-                {featuredVideo.description}
-              </motion.p>
-              
-              <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-                className="flex items-center gap-4 pt-4"
-              >
-                <Link 
-                  to={`/video/${featuredVideo.id}`}
-                  className="flex items-center gap-2 px-8 py-4 bg-rose-600 hover:bg-rose-700 rounded-full font-bold transition-all hover:scale-105 shadow-xl shadow-rose-600/20"
+            {/* Premium Content Area */}
+            <div className="absolute inset-0 z-20 flex flex-col justify-end p-6 sm:p-10 md:p-14 lg:p-16">
+              <div className="max-w-3xl space-y-4 sm:space-y-5">
+                {/* Sparkles Badge */}
+                <motion.div 
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-rose-600/10 border border-rose-500/20 text-rose-500 text-xs font-bold uppercase tracking-widest w-fit shadow-sm"
                 >
-                  <Play className="w-5 h-5 fill-current" />
-                  Watch Now
-                </Link>
-                <Link 
-                  to={`/video/${featuredVideo.id}`}
-                  className="flex items-center gap-2 px-8 py-4 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full font-bold transition-all"
+                  <Sparkles className="w-3.5 h-3.5 text-rose-500 animate-pulse" />
+                  <span>Featured Content / ফিউচার কন্টেন্ট</span>
+                </motion.div>
+                
+                {/* Title */}
+                <motion.h1 
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 }}
+                  className={`text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-black tracking-tight leading-tight ${isDarkMode ? 'text-white' : 'text-neutral-950'}`}
                 >
-                  <Info className="w-5 h-5" />
-                  More Info
-                </Link>
-              </motion.div>
+                  {featuredVideo.title}
+                </motion.h1>
+                
+                {/* Description */}
+                <motion.p 
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 }}
+                  className={`text-sm sm:text-base md:text-lg line-clamp-3 max-w-2xl font-medium leading-relaxed ${isDarkMode ? 'text-neutral-300' : 'text-neutral-700'}`}
+                >
+                  {featuredVideo.description}
+                </motion.p>
+                
+                {/* Action Buttons */}
+                <motion.div 
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3 }}
+                  className="flex flex-wrap items-center gap-3 sm:gap-4 pt-2"
+                >
+                  <Link 
+                    to={`/video/${featuredVideo.id}`}
+                    className="flex items-center gap-2 px-6 py-3.5 sm:px-8 sm:py-4 bg-rose-600 hover:bg-rose-700 text-white rounded-full font-bold transition-all hover:scale-[1.03] shadow-lg shadow-rose-600/35 text-xs sm:text-sm md:text-base shrink-0"
+                  >
+                    <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current" />
+                    Watch Now / এখনই দেখুন
+                  </Link>
+                  <Link 
+                    to={`/video/${featuredVideo.id}`}
+                    className={`flex items-center gap-2 px-6 py-3.5 sm:px-8 sm:py-4 rounded-full font-bold transition-all hover:scale-[1.03] text-xs sm:text-sm md:text-base shrink-0 border ${isDarkMode ? 'bg-white/10 hover:bg-white/15 text-white border-white/5 backdrop-blur-md' : 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-200/50'}`}
+                  >
+                    <Info className="w-4 h-4 sm:w-5 sm:h-5" />
+                    More Info / বিস্তারিত
+                  </Link>
+                </motion.div>
+              </div>
             </div>
           </div>
         </section>

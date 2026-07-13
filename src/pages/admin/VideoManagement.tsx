@@ -412,6 +412,15 @@ export default function VideoManagement() {
     };
   }, []);
 
+  const fileToBase64 = (file: File | Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
   const uploadFile = async (file: File | Blob, path: string, fileName?: string): Promise<string> => {
     return new Promise((resolve, reject) => {
       const name = fileName || (file as File).name || `auto_thumbnail_${Date.now()}.jpg`;
@@ -539,14 +548,24 @@ export default function VideoManagement() {
         try {
           thumbnailUrl = await uploadFile(thumbFile, 'thumbnails');
         } catch (uploadErr: any) {
-          console.error("Thumbnail upload error:", uploadErr);
-          throw new Error(`STORAGE_THUMBNAIL_FAILED: ${uploadErr?.message || 'Access Denied'}`);
+          console.warn("Firebase Storage upload blocked or failed for thumbnail. Falling back to local Base64/DataURL.", uploadErr);
+          try {
+            thumbnailUrl = await fileToBase64(thumbFile);
+          } catch (b64Err) {
+            console.error("Base64 conversion failed", b64Err);
+            throw new Error(`STORAGE_THUMBNAIL_FAILED: ${uploadErr?.message || 'Access Denied'}`);
+          }
         }
       } else if ((!thumbnailUrl || thumbnailUrl === '(Auto-generated from Video)') && autoThumbnailBlob) {
         try {
           thumbnailUrl = await uploadFile(autoThumbnailBlob, 'thumbnails', 'auto_thumbnail.jpg');
         } catch (uploadErr: any) {
-          console.error("Auto thumbnail upload error:", uploadErr);
+          console.warn("Firebase Storage upload blocked or failed for auto thumbnail. Falling back to local Base64/DataURL.", uploadErr);
+          try {
+            thumbnailUrl = await fileToBase64(autoThumbnailBlob);
+          } catch (b64Err) {
+            console.error("Base64 conversion failed for auto-thumbnail", b64Err);
+          }
         }
       }
 
