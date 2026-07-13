@@ -138,5 +138,110 @@ img {
   }
 }
 
+/* Light Mode overrides */
+.light-theme {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+.light-theme .bg-neutral-950 {
+  background-color: #f8fafc !important;
+}
+.light-theme .bg-neutral-900 {
+  background-color: #ffffff !important;
+}
+.light-theme .bg-neutral-800 {
+  background-color: #f1f5f9 !important;
+}
+.light-theme .bg-neutral-950\/80,
+.light-theme .bg-neutral-950\/60,
+.light-theme .bg-neutral-950\/50,
+.light-theme .bg-neutral-950\/20,
+.light-theme .bg-neutral-900\/95,
+.light-theme .bg-neutral-900\/60,
+.light-theme .bg-neutral-900\/50,
+.light-theme .bg-neutral-900\/20 {
+  background-color: rgba(255, 255, 255, 0.85) !important;
+}
+.light-theme .bg-neutral-950\/30,
+.light-theme .bg-neutral-900\/30 {
+  background-color: rgba(255, 255, 255, 0.5) !important;
+}
+
+.light-theme .text-white {
+  color: #0f172a !important;
+}
+.light-theme .text-neutral-100 {
+  color: #1e293b !important;
+}
+.light-theme .text-neutral-200 {
+  color: #334155 !important;
+}
+.light-theme .text-neutral-300 {
+  color: #475569 !important;
+}
+.light-theme .text-neutral-400 {
+  color: #64748b !important;
+}
+.light-theme .text-neutral-500 {
+  color: #94a3b8 !important;
+}
+
+.light-theme .border-white\/5,
+.light-theme .border-white\/10 {
+  border-color: #cbd5e1 !important;
+}
+.light-theme .divide-white\/5 {
+  border-color: #cbd5e1 !important;
+}
+
+.light-theme .placeholder-neutral-500::placeholder {
+  color: #94a3b8 !important;
+}
+.light-theme input::placeholder,
+.light-theme textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Input, select and textarea adjustments for readability */
+.light-theme input,
+.light-theme textarea,
+.light-theme select {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+.light-theme .hover\:bg-neutral-800:hover {
+  background-color: #e2e8f0 !important;
+}
+.light-theme .hover\:bg-neutral-900:hover {
+  background-color: #f1f5f9 !important;
+}
+.light-theme .hover\:text-white:hover {
+  color: #0f172a !important;
+}
+
+.light-theme .glass {
+  background-color: rgba(255, 255, 255, 0.7) !important;
+  backdrop-filter: blur(12px) !important;
+  border-color: rgba(15, 23, 42, 0.08) !important;
+}
+
+.light-theme .premium-shadow {
+  box-shadow: 0 10px 30px -10px rgba(15, 23, 42, 0.1) !important;
+}
+
+.light-theme ::-webkit-scrollbar-track {
+  background-color: #f8fafc !important;
+}
+.light-theme ::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1 !important;
+}
+.light-theme ::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8 !important;
+}
+
+
 
 

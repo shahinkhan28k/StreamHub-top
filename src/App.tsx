@@ -138,9 +138,11 @@ const AppContent = () => {
     };
   }, [profile, siteSettings]);
 
+  const isDarkMode = siteSettings?.featureToggles?.darkMode !== false;
+
   return (
     <Router>
-      <div className="min-h-screen w-full overflow-x-hidden relative bg-neutral-950 text-white selection:bg-rose-500 selection:text-white">
+      <div className={`min-h-screen w-full overflow-x-hidden relative selection:bg-rose-500 selection:text-white transition-colors duration-300 ${isDarkMode ? 'bg-neutral-950 text-white' : 'light-theme text-slate-900 bg-[#f8fafc]'}`}>
         <Navbar />
         <main className="pb-20">
           <Routes>
