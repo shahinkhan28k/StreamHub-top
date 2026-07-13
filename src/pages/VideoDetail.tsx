@@ -198,6 +198,73 @@ function getEmbedUrl(url: string) {
   return null;
 }
 
+// Helper to optimize HTML embed codes (such as iframes) so they support proper navigation, fullscreen, policies, and allow suggested videos to play
+function optimizeEmbedCode(html: string): string {
+  if (!html) return '';
+  let optimized = html;
+
+  // If there's an iframe in the html string
+  if (optimized.toLowerCase().includes('<iframe')) {
+    // 1. Remove referrerpolicy="no-referrer" or any restrictive referrerpolicy, and replace with "strict-origin-when-cross-origin"
+    // Many premium/third-party embeds block playback or navigation if the referrer header is missing or blank.
+    optimized = optimized.replace(/referrerpolicy=["'][^"']*["']/gi, 'referrerpolicy="strict-origin-when-cross-origin"');
+    if (!/referrerpolicy=/i.test(optimized)) {
+      optimized = optimized.replace(/<iframe/i, '<iframe referrerpolicy="strict-origin-when-cross-origin"');
+    }
+
+    // 2. Ensure allowfullscreen and other browser-specific full screen flags are present
+    if (!/allowfullscreen/i.test(optimized)) {
+      optimized = optimized.replace(/<iframe/i, '<iframe allowfullscreen="true" webkitallowfullscreen="true" mozallowfullscreen="true"');
+    } else {
+      if (!/webkitallowfullscreen/i.test(optimized)) {
+        optimized = optimized.replace(/allowfullscreen/gi, 'allowfullscreen="true" webkitallowfullscreen="true" mozallowfullscreen="true"');
+      }
+    }
+
+    // 3. Make sure allow="..." includes all capabilities for seamless streaming and interaction
+    const allowMatch = optimized.match(/allow=["']([^"']+)["']/i);
+    if (allowMatch) {
+      const currentAllow = allowMatch[1];
+      let newAllow = currentAllow;
+      const keyCapabilities = ['autoplay', 'encrypted-media', 'picture-in-picture', 'fullscreen', 'clipboard-write', 'gyroscope', 'accelerometer', 'web-share'];
+      keyCapabilities.forEach(cap => {
+        if (!newAllow.toLowerCase().includes(cap.toLowerCase())) {
+          newAllow += `; ${cap}`;
+        }
+      });
+      optimized = optimized.replace(/allow=["']([^"']+)["']/i, `allow="${newAllow}"`);
+    } else {
+      optimized = optimized.replace(/<iframe/i, '<iframe allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"');
+    }
+    
+    // 4. Force allow-top-navigation, allow-same-origin, allow-scripts inside sandbox if sandbox exists.
+    if (/sandbox=/i.test(optimized)) {
+      const sandboxMatch = optimized.match(/sandbox=["']([^"']+)["']/i);
+      if (sandboxMatch) {
+        let currentSandbox = sandboxMatch[1];
+        const requiredTokens = [
+          'allow-same-origin',
+          'allow-scripts',
+          'allow-forms',
+          'allow-popups',
+          'allow-popups-to-escape-sandbox',
+          'allow-presentation',
+          'allow-top-navigation-by-user-activation',
+          'allow-downloads'
+        ];
+        requiredTokens.forEach(token => {
+          if (!currentSandbox.toLowerCase().includes(token.toLowerCase())) {
+            currentSandbox += ` ${token}`;
+          }
+        });
+        optimized = optimized.replace(/sandbox=["']([^"']+)["']/i, `sandbox="${currentSandbox}"`);
+      }
+    }
+  }
+
+  return optimized;
+}
+
 export default function VideoDetail() {
   const { id } = useParams<{ id: string }>();
   const { user, profile, isAdmin } = useAuth();
@@ -422,7 +489,14 @@ export default function VideoDetail() {
         if (el) el.remove();
       });
     };
-  }, [siteSettings, isAdmin]);
+  }, [
+    isAdmin,
+    siteSettings?.adConfig?.enabled,
+    siteSettings?.adConfig?.popunderScript,
+    siteSettings?.adConfig?.socialBarScript,
+    siteSettings?.adConfig?.popunderTopScript,
+    siteSettings?.adConfig?.socialBarTopScript
+  ]);
 
   useEffect(() => {
     if (isAdmin) {
@@ -867,7 +941,7 @@ export default function VideoDetail() {
                 <div className="w-full h-full relative bg-black">
                   <div 
                     className="w-full h-full absolute inset-0 flex items-center justify-center [&_iframe]:w-full [&_iframe]:h-full [&_iframe]:absolute [&_iframe]:inset-0 [&_iframe]:border-0"
-                    dangerouslySetInnerHTML={{ __html: video.embedCode }}
+                    dangerouslySetInnerHTML={{ __html: optimizeEmbedCode(video.embedCode) }}
                   />
                   {/* Floating Back Button for Custom Embeds */}
                   <div className="absolute top-4 left-4 z-10">
@@ -881,9 +955,13 @@ export default function VideoDetail() {
                   <iframe
                     src={embedUrl}
                     className="w-full h-full border-0 absolute inset-0 z-0"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                    allowFullScreen
-                    referrerPolicy="no-referrer"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+                    allowFullScreen={true}
+                    // @ts-ignore
+                    webkitallowfullscreen="true"
+                    // @ts-ignore
+                    mozallowfullscreen="true"
+                    referrerPolicy="strict-origin-when-cross-origin"
                   />
                   {/* Floating Back Button for Iframe Embeds */}
                   <div className="absolute top-4 left-4 z-10">

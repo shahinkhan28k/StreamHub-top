@@ -44,7 +44,7 @@ export default function AdRenderer({ htmlCode, className = "" }: AdRendererProps
   return (
     <div 
       ref={containerRef} 
-      className={`w-full flex justify-center items-center overflow-hidden bg-neutral-900/10 border border-white/5 rounded-2xl p-4 my-6 ${className}`}
+      className={`w-full min-h-[100px] flex justify-center items-center overflow-hidden bg-neutral-900/10 border border-white/5 rounded-2xl p-4 my-6 transition-all duration-300 ${className}`}
     />
   );
 }

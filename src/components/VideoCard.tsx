@@ -10,18 +10,30 @@ interface VideoCardProps {
 }
 
 const VideoCard: React.FC<{ video: Video }> = ({ video }) => {
+  const [imgError, setImgError] = React.useState(false);
+
   return (
     <div
       className="group relative bg-neutral-900 rounded-xl overflow-hidden border border-white/5 md:hover:border-rose-500/30 transition-all duration-300 shadow-lg md:hover:-translate-y-1"
     >
       <Link to={`/video/${video.id}`}>
-        <div className="relative aspect-video overflow-hidden">
-          <img
-            src={video.thumbnail}
-            alt={video.title}
-            className="w-full h-full object-cover transition-transform duration-500 md:group-hover:scale-110"
-            loading="lazy"
-          />
+        <div className="relative aspect-video overflow-hidden bg-neutral-950">
+          {!imgError && video.thumbnail ? (
+            <img
+              src={video.thumbnail}
+              alt={video.title}
+              className="w-full h-full object-cover transition-transform duration-500 md:group-hover:scale-110"
+              loading="lazy"
+              onError={() => setImgError(true)}
+            />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-neutral-950 to-neutral-900 flex flex-col items-center justify-center p-4 text-center select-none border-b border-white/5">
+              <div className="w-10 h-10 rounded-full bg-rose-600/10 flex items-center justify-center border border-rose-500/20 mb-1">
+                <Play className="w-5 h-5 text-rose-500 fill-current translate-x-0.5" />
+              </div>
+              <span className="text-[9px] text-neutral-500 font-black uppercase tracking-wider">{video.categoryId || 'Premium'}</span>
+            </div>
+          )}
           <div className="absolute inset-0 bg-black/20 md:group-hover:bg-black/0 transition-colors" />
           
           {video.locked && (

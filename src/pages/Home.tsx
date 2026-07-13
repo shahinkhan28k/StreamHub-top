@@ -115,7 +115,14 @@ export default function Home() {
         if (el) el.remove();
       });
     };
-  }, [siteSettings, isAdmin]);
+  }, [
+    isAdmin,
+    siteSettings?.adConfig?.enabled,
+    siteSettings?.adConfig?.popunderScript,
+    siteSettings?.adConfig?.socialBarScript,
+    siteSettings?.adConfig?.popunderTopScript,
+    siteSettings?.adConfig?.socialBarTopScript
+  ]);
 
   const getCategoriesFromMenu = () => {
     const menu = siteSettings?.navigationMenu || [
