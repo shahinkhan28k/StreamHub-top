@@ -85,27 +85,48 @@ export default function Home() {
     ];
 
     scriptsToInject.forEach(({ id, code }) => {
-      if (code && !document.getElementById(id)) {
-        const script = document.createElement('script');
-        script.id = id;
-        
-        if (code.includes('<script')) {
-          const temp = document.createElement('div');
-          temp.innerHTML = code;
-          const actualScript = temp.querySelector('script');
-          if (actualScript) {
-            Array.from(actualScript.attributes).forEach(attr => {
-              script.setAttribute(attr.name, attr.value);
-            });
-            script.innerHTML = actualScript.innerHTML;
-          } else {
-            script.innerHTML = code;
+      if (!code || document.getElementById(id)) return;
+
+      // Create a wrapper block to hold all script tags & markup
+      const wrapper = document.createElement('div');
+      wrapper.id = id;
+      wrapper.style.display = 'none';
+
+      // Parse with DOMParser to handle multiple tags, styling, etc.
+      try {
+        const parser = new DOMParser();
+        const parsedDoc = parser.parseFromString(code, 'text/html');
+        const nodes = Array.from(parsedDoc.body.childNodes);
+
+        nodes.forEach(node => {
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            const el = node as HTMLElement;
+            if (el.tagName.toLowerCase() === 'script') {
+              const newScript = document.createElement('script');
+              // Copy all attributes securely
+              Array.from(el.attributes).forEach(attr => {
+                newScript.setAttribute(attr.name, attr.value);
+              });
+              // Copy internal text/content
+              newScript.text = el.textContent || '';
+              wrapper.appendChild(newScript);
+            } else {
+              // Copy any other elements like style blocks or divs
+              const cloned = el.cloneNode(true);
+              wrapper.appendChild(cloned);
+            }
+          } else if (node.nodeType === Node.TEXT_NODE) {
+            wrapper.appendChild(document.createTextNode(node.textContent || ''));
           }
-        } else {
-          script.innerHTML = code;
-        }
-        document.body.appendChild(script);
+        });
+      } catch (err) {
+        // Fallback to simple script element in case parsing fails
+        const fallbackScript = document.createElement('script');
+        fallbackScript.innerHTML = code;
+        wrapper.appendChild(fallbackScript);
       }
+
+      document.body.appendChild(wrapper);
     });
 
     return () => {

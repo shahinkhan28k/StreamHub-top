@@ -14,7 +14,7 @@ const VideoCard: React.FC<{ video: Video }> = ({ video }) => {
 
   return (
     <div
-      className="group relative bg-neutral-900 rounded-xl overflow-hidden border border-white/5 md:hover:border-rose-500/30 transition-all duration-300 shadow-lg md:hover:-translate-y-1"
+      className="group relative bg-neutral-900 rounded-xl overflow-hidden border border-white/5 md:hover:border-rose-500/30 transition-[transform,border-color,box-shadow] duration-300 shadow-lg md:hover:-translate-y-1 transform-gpu will-change-transform"
     >
       <Link to={`/video/${video.id}`}>
         <div className="relative aspect-video overflow-hidden bg-neutral-950">

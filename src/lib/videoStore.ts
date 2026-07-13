@@ -2,6 +2,27 @@ import { collection, getDocs, doc, setDoc, deleteDoc, query, getDoc, onSnapshot 
 import { db } from './firebase';
 import { Video } from '../types';
 
+// Memory storage fallback for iframes with blocked storage access
+const memoryStorage: Record<string, string> = {};
+const safeLocalStorage = {
+  getItem: (key: string): string | null => {
+    try {
+      return localStorage.getItem(key);
+    } catch (e) {
+      console.warn("Storage access blocked by sandbox or browser. Falling back to memory storage.", e);
+      return memoryStorage[key] || null;
+    }
+  },
+  setItem: (key: string, value: string): void => {
+    try {
+      localStorage.setItem(key, value);
+    } catch (e) {
+      console.warn("Storage access blocked by sandbox or browser. Saving to memory storage.", e);
+      memoryStorage[key] = value;
+    }
+  }
+};
+
 const LOCAL_VIDEOS_KEY = 'novastream_local_videos';
 
 const DEFAULT_SEED_VIDEOS: Video[] = [
@@ -73,9 +94,9 @@ const DEFAULT_SEED_VIDEOS: Video[] = [
 
 // Helper to get local videos from storage
 function getLocalOnlyVideos(): Video[] {
-  const localData = localStorage.getItem(LOCAL_VIDEOS_KEY);
+  const localData = safeLocalStorage.getItem(LOCAL_VIDEOS_KEY);
   if (!localData) {
-    localStorage.setItem(LOCAL_VIDEOS_KEY, JSON.stringify(DEFAULT_SEED_VIDEOS));
+    safeLocalStorage.setItem(LOCAL_VIDEOS_KEY, JSON.stringify(DEFAULT_SEED_VIDEOS));
     return DEFAULT_SEED_VIDEOS;
   }
   try {
@@ -93,7 +114,7 @@ export async function getStoredVideos(): Promise<Video[]> {
     if (!snapshot.empty) {
       const firebaseVideos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Video));
       // Save a local copy for offline use/fallback
-      localStorage.setItem(LOCAL_VIDEOS_KEY, JSON.stringify(firebaseVideos));
+      safeLocalStorage.setItem(LOCAL_VIDEOS_KEY, JSON.stringify(firebaseVideos));
       return firebaseVideos;
     }
   } catch (error) {
@@ -150,7 +171,7 @@ export async function saveStoredVideo(videoData: Partial<Video> & { id?: string 
   } else {
     updatedLocals = locals.map(v => v.id === id ? finalVideo : v);
   }
-  localStorage.setItem(LOCAL_VIDEOS_KEY, JSON.stringify(updatedLocals));
+  safeLocalStorage.setItem(LOCAL_VIDEOS_KEY, JSON.stringify(updatedLocals));
 
   // Try updating Firestore in background
   try {
@@ -169,7 +190,7 @@ export async function deleteStoredVideo(video: Video): Promise<void> {
   // Update local storage
   const locals = getLocalOnlyVideos();
   const updatedLocals = locals.filter(v => v.id !== video.id);
-  localStorage.setItem(LOCAL_VIDEOS_KEY, JSON.stringify(updatedLocals));
+  safeLocalStorage.setItem(LOCAL_VIDEOS_KEY, JSON.stringify(updatedLocals));
 
   // Try updating Firestore
   try {
@@ -195,7 +216,7 @@ export function subscribeStoredVideos(
             (doc) => ({ id: doc.id, ...doc.data() } as Video)
           );
           // Update local cache
-          localStorage.setItem(LOCAL_VIDEOS_KEY, JSON.stringify(firebaseVideos));
+          safeLocalStorage.setItem(LOCAL_VIDEOS_KEY, JSON.stringify(firebaseVideos));
           onUpdate(firebaseVideos);
         } else {
           onUpdate(getLocalOnlyVideos());

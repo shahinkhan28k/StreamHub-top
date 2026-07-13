@@ -205,14 +205,16 @@ function optimizeEmbedCode(html: string): string {
 
   // If there's an iframe in the html string
   if (optimized.toLowerCase().includes('<iframe')) {
-    // 1. Remove referrerpolicy="no-referrer" or any restrictive referrerpolicy, and replace with "strict-origin-when-cross-origin"
-    // Many premium/third-party embeds block playback or navigation if the referrer header is missing or blank.
-    optimized = optimized.replace(/referrerpolicy=["'][^"']*["']/gi, 'referrerpolicy="strict-origin-when-cross-origin"');
-    if (!/referrerpolicy=/i.test(optimized)) {
-      optimized = optimized.replace(/<iframe/i, '<iframe referrerpolicy="strict-origin-when-cross-origin"');
-    }
+    // 1. Completely remove any "sandbox" attribute to give the player 100% full privileges to run scripts, handle clicks, store player memory, and play subsequent/suggested videos.
+    optimized = optimized.replace(/sandbox=["'][^"']*["']/gi, '');
+    optimized = optimized.replace(/\bsandbox\b/gi, '');
 
-    // 2. Ensure allowfullscreen and other browser-specific full screen flags are present
+    // 2. Adjust referrerpolicy. Many sites (like dood, Streamtape, tape, xvideo) require referrer, but some fail if it's set to "no-referrer". 
+    // Setting it to 'strict-origin-when-cross-origin' or removing it is safer. Let's remove any explicit referrerpolicy to let the browser fall back, or use 'strict-origin-when-cross-origin'.
+    optimized = optimized.replace(/referrerpolicy=["'][^"']*["']/gi, '');
+    optimized = optimized.replace(/<iframe/i, '<iframe referrerpolicy="strict-origin-when-cross-origin"');
+
+    // 3. Ensure allowfullscreen and other browser-specific full screen flags are present
     if (!/allowfullscreen/i.test(optimized)) {
       optimized = optimized.replace(/<iframe/i, '<iframe allowfullscreen="true" webkitallowfullscreen="true" mozallowfullscreen="true"');
     } else {
@@ -221,7 +223,7 @@ function optimizeEmbedCode(html: string): string {
       }
     }
 
-    // 3. Make sure allow="..." includes all capabilities for seamless streaming and interaction
+    // 4. Make sure allow="..." includes all capabilities for seamless streaming and interaction
     const allowMatch = optimized.match(/allow=["']([^"']+)["']/i);
     if (allowMatch) {
       const currentAllow = allowMatch[1];
@@ -236,34 +238,31 @@ function optimizeEmbedCode(html: string): string {
     } else {
       optimized = optimized.replace(/<iframe/i, '<iframe allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"');
     }
-    
-    // 4. Force allow-top-navigation, allow-same-origin, allow-scripts inside sandbox if sandbox exists.
-    if (/sandbox=/i.test(optimized)) {
-      const sandboxMatch = optimized.match(/sandbox=["']([^"']+)["']/i);
-      if (sandboxMatch) {
-        let currentSandbox = sandboxMatch[1];
-        const requiredTokens = [
-          'allow-same-origin',
-          'allow-scripts',
-          'allow-forms',
-          'allow-popups',
-          'allow-popups-to-escape-sandbox',
-          'allow-presentation',
-          'allow-top-navigation-by-user-activation',
-          'allow-downloads'
-        ];
-        requiredTokens.forEach(token => {
-          if (!currentSandbox.toLowerCase().includes(token.toLowerCase())) {
-            currentSandbox += ` ${token}`;
-          }
-        });
-        optimized = optimized.replace(/sandbox=["']([^"']+)["']/i, `sandbox="${currentSandbox}"`);
-      }
-    }
   }
 
   return optimized;
 }
+
+// Memory storage fallback for iframes with blocked storage access
+const memoryStorage: Record<string, string> = {};
+const safeLocalStorage = {
+  getItem: (key: string): string | null => {
+    try {
+      return localStorage.getItem(key);
+    } catch (e) {
+      console.warn("Storage access blocked by sandbox or browser. Falling back to memory storage.", e);
+      return memoryStorage[key] || null;
+    }
+  },
+  setItem: (key: string, value: string): void => {
+    try {
+      localStorage.setItem(key, value);
+    } catch (e) {
+      console.warn("Storage access blocked by sandbox or browser. Saving to memory storage.", e);
+      memoryStorage[key] = value;
+    }
+  }
+};
 
 export default function VideoDetail() {
   const { id } = useParams<{ id: string }>();
@@ -281,6 +280,138 @@ export default function VideoDetail() {
   const [hasClickedAd, setHasClickedAd] = useState(false);
   const [activeAdCampaign, setActiveAdCampaign] = useState<string | null>(null);
   const timerInterval = useRef<number | null>(null);
+
+  // Like and Save state synced with localStorage
+  const [isLiked, setIsLiked] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+  const [likeCount, setLikeCount] = useState(0);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!id) return;
+    const likedVideos = JSON.parse(safeLocalStorage.getItem('likedVideos') || '[]');
+    setIsLiked(likedVideos.includes(id));
+
+    const savedVideos = JSON.parse(safeLocalStorage.getItem('savedVideos') || '[]');
+    setIsSaved(savedVideos.includes(id));
+  }, [id]);
+
+  useEffect(() => {
+    if (!video || !id) return;
+    const likedVideos = JSON.parse(safeLocalStorage.getItem('likedVideos') || '[]');
+    const isCurrentlyLiked = likedVideos.includes(id);
+    // @ts-ignore
+    const baseLikes = video.likes || Math.abs(id.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % 200) + 12;
+    setLikeCount(baseLikes + (isCurrentlyLiked ? 1 : 0));
+  }, [video, id]);
+
+  const handleLike = async () => {
+    if (!id || !video) return;
+    
+    const likedVideos = JSON.parse(safeLocalStorage.getItem('likedVideos') || '[]');
+    let newLikedVideos = [...likedVideos];
+    let newIsLiked = false;
+    let newLikeCount = likeCount;
+
+    if (likedVideos.includes(id)) {
+      newLikedVideos = newLikedVideos.filter(vid => vid !== id);
+      newIsLiked = false;
+      newLikeCount = Math.max(0, likeCount - 1);
+    } else {
+      newLikedVideos.push(id);
+      newIsLiked = true;
+      newLikeCount = likeCount + 1;
+    }
+
+    safeLocalStorage.setItem('likedVideos', JSON.stringify(newLikedVideos));
+    setIsLiked(newIsLiked);
+    setLikeCount(newLikeCount);
+
+    try {
+      const docRef = doc(db, 'videos', id);
+      await updateDoc(docRef, { 
+        likes: increment(newIsLiked ? 1 : -1) 
+      });
+    } catch (e) {
+      console.warn("Could not sync like to Firestore");
+    }
+  };
+
+  const handleForceLike = async () => {
+    if (!id || !video) return;
+    setLikeCount(prev => prev + 1);
+    try {
+      const docRef = doc(db, 'videos', id);
+      await updateDoc(docRef, { 
+        likes: increment(1) 
+      });
+    } catch (e) {
+      console.warn("Could not force-like in Firestore", e);
+    }
+  };
+
+  // Automated interaction via URL query parameters and window postMessages
+  useEffect(() => {
+    if (!id || !video) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const panelLike = params.get('panel_like') === 'true' || params.get('autolike') === 'true' || params.get('action') === 'like';
+    const forceLike = params.get('force_like') === 'true' || params.get('add_like') === 'true' || params.get('like') === '1';
+
+    if (forceLike) {
+      handleForceLike();
+      // Clean query parameters from address bar to prevent double triggers on reload
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete('force_like');
+      cleanUrl.searchParams.delete('add_like');
+      cleanUrl.searchParams.delete('like');
+      window.history.replaceState({}, '', cleanUrl.toString());
+    } else if (panelLike) {
+      const likedVideos = JSON.parse(safeLocalStorage.getItem('likedVideos') || '[]');
+      if (!likedVideos.includes(id)) {
+        handleLike();
+      }
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete('panel_like');
+      cleanUrl.searchParams.delete('autolike');
+      cleanUrl.searchParams.delete('action');
+      window.history.replaceState({}, '', cleanUrl.toString());
+    }
+
+    // Message listener for external panel integrations (iframes / webviews)
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'LIKE_VIDEO' && event.data?.id === id) {
+        const likedVideos = JSON.parse(safeLocalStorage.getItem('likedVideos') || '[]');
+        if (!likedVideos.includes(id)) {
+          handleLike();
+        }
+      } else if (event.data?.type === 'FORCE_LIKE_VIDEO' && event.data?.id === id) {
+        handleForceLike();
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [id, video, likeCount]);
+
+  const handleSave = () => {
+    if (!id || !video) return;
+
+    const savedVideos = JSON.parse(safeLocalStorage.getItem('savedVideos') || '[]');
+    let newSavedVideos = [...savedVideos];
+    let newIsSaved = false;
+
+    if (savedVideos.includes(id)) {
+      newSavedVideos = newSavedVideos.filter(vid => vid !== id);
+      newIsSaved = false;
+    } else {
+      newSavedVideos.push(id);
+      newIsSaved = true;
+    }
+
+    safeLocalStorage.setItem('savedVideos', JSON.stringify(newSavedVideos));
+    setIsSaved(newIsSaved);
+  };
   
   // Video Player State
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -416,12 +547,12 @@ export default function VideoDetail() {
               setComments(commentsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Comment)));
             } else {
               // Read local comments fallback
-              const cached = localStorage.getItem(`comments_${id}`);
+              const cached = safeLocalStorage.getItem(`comments_${id}`);
               if (cached) setComments(JSON.parse(cached));
             }
           } catch (e) {
             console.warn("Firestore comments unavailable, loading locally");
-            const cached = localStorage.getItem(`comments_${id}`);
+            const cached = safeLocalStorage.getItem(`comments_${id}`);
             if (cached) setComments(JSON.parse(cached));
           }
         } else {
@@ -459,27 +590,48 @@ export default function VideoDetail() {
     ];
 
     scriptsToInject.forEach(({ id, code }) => {
-      if (code && !document.getElementById(id)) {
-        const script = document.createElement('script');
-        script.id = id;
-        
-        if (code.includes('<script')) {
-          const temp = document.createElement('div');
-          temp.innerHTML = code;
-          const actualScript = temp.querySelector('script');
-          if (actualScript) {
-            Array.from(actualScript.attributes).forEach(attr => {
-              script.setAttribute(attr.name, attr.value);
-            });
-            script.innerHTML = actualScript.innerHTML;
-          } else {
-            script.innerHTML = code;
+      if (!code || document.getElementById(id)) return;
+
+      // Create a wrapper block to hold all script tags & markup
+      const wrapper = document.createElement('div');
+      wrapper.id = id;
+      wrapper.style.display = 'none';
+
+      // Parse with DOMParser to handle multiple tags, styling, etc.
+      try {
+        const parser = new DOMParser();
+        const parsedDoc = parser.parseFromString(code, 'text/html');
+        const nodes = Array.from(parsedDoc.body.childNodes);
+
+        nodes.forEach(node => {
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            const el = node as HTMLElement;
+            if (el.tagName.toLowerCase() === 'script') {
+              const newScript = document.createElement('script');
+              // Copy all attributes securely
+              Array.from(el.attributes).forEach(attr => {
+                newScript.setAttribute(attr.name, attr.value);
+              });
+              // Copy internal text/content
+              newScript.text = el.textContent || '';
+              wrapper.appendChild(newScript);
+            } else {
+              // Copy any other elements like style blocks or divs
+              const cloned = el.cloneNode(true);
+              wrapper.appendChild(cloned);
+            }
+          } else if (node.nodeType === Node.TEXT_NODE) {
+            wrapper.appendChild(document.createTextNode(node.textContent || ''));
           }
-        } else {
-          script.innerHTML = code;
-        }
-        document.body.appendChild(script);
+        });
+      } catch (err) {
+        // Fallback to simple script element in case parsing fails
+        const fallbackScript = document.createElement('script');
+        fallbackScript.innerHTML = code;
+        wrapper.appendChild(fallbackScript);
       }
+
+      document.body.appendChild(wrapper);
     });
 
     return () => {
@@ -631,11 +783,11 @@ export default function VideoDetail() {
               updateDoc(docRef, { duration: formatted }).catch(err => console.warn(err));
               
               // Also update localStorage so changes are immediate locally
-              const localData = localStorage.getItem('novastream_local_videos');
+              const localData = safeLocalStorage.getItem('novastream_local_videos');
               if (localData) {
                 const locals = JSON.parse(localData) as Video[];
                 const updated = locals.map(v => v.id === video.id ? { ...v, duration: formatted } : v);
-                localStorage.setItem('novastream_local_videos', JSON.stringify(updated));
+                safeLocalStorage.setItem('novastream_local_videos', JSON.stringify(updated));
               }
             } catch (err) {
               console.warn("Stand-alone duration sync skipped", err);
@@ -1173,14 +1325,40 @@ export default function VideoDetail() {
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <h1 className="text-2xl font-bold tracking-tight">{video.title}</h1>
             <div className="flex items-center gap-2">
-              <button className="flex items-center gap-2 px-4 py-2 bg-neutral-900 border border-white/5 rounded-full hover:bg-neutral-800 transition-colors text-sm font-medium">
-                <ThumbsUp className="w-4 h-4" /> Like
+              <button 
+                id="video-like-btn"
+                onClick={handleLike}
+                className={`flex items-center gap-2 px-4 py-2 border rounded-full transition-all text-sm font-medium ${
+                  isLiked 
+                    ? 'bg-rose-600/10 border-rose-500 text-rose-500 hover:bg-rose-600/20 shadow-lg shadow-rose-600/5' 
+                    : 'bg-neutral-900 border-white/5 text-neutral-300 hover:bg-neutral-800'
+                }`}
+              >
+                <ThumbsUp className={`w-4 h-4 ${isLiked ? 'fill-current text-rose-500' : ''}`} /> 
+                <span>{isLiked ? 'Liked' : 'Like'} ({likeCount})</span>
               </button>
-              <button className="flex items-center gap-2 px-4 py-2 bg-neutral-900 border border-white/5 rounded-full hover:bg-neutral-800 transition-colors text-sm font-medium">
-                <Share2 className="w-4 h-4" /> Share
+              <button 
+                id="video-share-btn"
+                onClick={() => {
+                  navigator.clipboard.writeText(window.location.href);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-neutral-900 border border-white/5 rounded-full hover:bg-neutral-800 transition-colors text-sm font-medium text-neutral-300"
+              >
+                <Share2 className="w-4 h-4" /> {copied ? 'Copied!' : 'Share'}
               </button>
-              <button className="flex items-center gap-2 px-4 py-2 bg-neutral-900 border border-white/5 rounded-full hover:bg-neutral-800 transition-colors text-sm font-medium">
-                <Heart className="w-4 h-4" /> Save
+              <button 
+                id="video-save-btn"
+                onClick={handleSave}
+                className={`flex items-center gap-2 px-4 py-2 border rounded-full transition-all text-sm font-medium ${
+                  isSaved 
+                    ? 'bg-rose-600/10 border-rose-500 text-rose-500 hover:bg-rose-600/20 shadow-lg shadow-rose-600/5' 
+                    : 'bg-neutral-900 border-white/5 text-neutral-300 hover:bg-neutral-800'
+                }`}
+              >
+                <Heart className={`w-4 h-4 ${isSaved ? 'fill-current text-rose-500' : ''}`} /> 
+                <span>{isSaved ? 'Saved' : 'Save'}</span>
               </button>
             </div>
           </div>

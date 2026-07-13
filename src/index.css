@@ -70,3 +70,32 @@
   animation: fade-in 0.5s ease-out forwards;
 }
 
+/* 
+  Hardware acceleration and anti-jitter overrides.
+  This forces browsers to use GPU-based layers during scaling and translations, 
+  preventing sub-pixel wiggling, shaking, or flickering when hovering on elements 
+  such as video cards, buttons, or custom glass panels.
+*/
+.group,
+.transition,
+.transition-all,
+.transition-transform,
+[class*="transition-"],
+[class*="hover:"],
+img {
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  -webkit-transform-style: preserve-3d;
+  transform-style: preserve-3d;
+  image-rendering: -webkit-optimize-contrast;
+}
+
+.transform-gpu,
+[class*="hover:-translate"],
+[class*="group-hover:scale"],
+[class*="hover:scale"] {
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+}
+
+
