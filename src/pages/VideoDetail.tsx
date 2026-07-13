@@ -15,6 +15,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import VideoCard from '../components/VideoCard';
 import { getSingleStoredVideo, getStoredVideos } from '../lib/videoStore';
 import AdRenderer from '../components/AdRenderer';
+import CustomAdsSpot from '../components/CustomAdsSpot';
 import Hls from 'hls.js';
 
 // Preprocess URLs to ensure standard cloud drives return direct media streaming streams or clean embed src
@@ -568,87 +569,6 @@ export default function VideoDetail() {
     fetchVideoAndSettings();
     window.scrollTo(0, 0);
   }, [id, navigate, isUnlocked, isAdmin]);
-
-  useEffect(() => {
-    // Clean up existing injected ad scripts if user is admin or ads are disabled
-    const scriptIds = ['ad-popunder', 'ad-socialbar', 'ad-popundertop', 'ad-socialbartop'];
-    
-    if (isAdmin || !siteSettings?.adConfig?.enabled) {
-      scriptIds.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.remove();
-      });
-      return;
-    }
-
-    const adConfig = siteSettings.adConfig;
-    const scriptsToInject = [
-      { id: 'ad-popunder', code: adConfig.popunderScript },
-      { id: 'ad-socialbar', code: adConfig.socialBarScript },
-      { id: 'ad-popundertop', code: adConfig.popunderTopScript },
-      { id: 'ad-socialbartop', code: adConfig.socialBarTopScript }
-    ];
-
-    scriptsToInject.forEach(({ id, code }) => {
-      if (!code || document.getElementById(id)) return;
-
-      // Create a wrapper block to hold all script tags & markup
-      const wrapper = document.createElement('div');
-      wrapper.id = id;
-      wrapper.style.display = 'none';
-
-      // Parse with DOMParser to handle multiple tags, styling, etc.
-      try {
-        const parser = new DOMParser();
-        const parsedDoc = parser.parseFromString(code, 'text/html');
-        const nodes = Array.from(parsedDoc.body.childNodes);
-
-        nodes.forEach(node => {
-          if (node.nodeType === Node.ELEMENT_NODE) {
-            const el = node as HTMLElement;
-            if (el.tagName.toLowerCase() === 'script') {
-              const newScript = document.createElement('script');
-              // Copy all attributes securely
-              Array.from(el.attributes).forEach(attr => {
-                newScript.setAttribute(attr.name, attr.value);
-              });
-              // Copy internal text/content
-              newScript.text = el.textContent || '';
-              wrapper.appendChild(newScript);
-            } else {
-              // Copy any other elements like style blocks or divs
-              const cloned = el.cloneNode(true);
-              wrapper.appendChild(cloned);
-            }
-          } else if (node.nodeType === Node.TEXT_NODE) {
-            wrapper.appendChild(document.createTextNode(node.textContent || ''));
-          }
-        });
-      } catch (err) {
-        // Fallback to simple script element in case parsing fails
-        const fallbackScript = document.createElement('script');
-        fallbackScript.innerHTML = code;
-        wrapper.appendChild(fallbackScript);
-      }
-
-      document.body.appendChild(wrapper);
-    });
-
-    return () => {
-      // Cleanup on unmount or when dependencies change
-      scriptIds.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.remove();
-      });
-    };
-  }, [
-    isAdmin,
-    siteSettings?.adConfig?.enabled,
-    siteSettings?.adConfig?.popunderScript,
-    siteSettings?.adConfig?.socialBarScript,
-    siteSettings?.adConfig?.popunderTopScript,
-    siteSettings?.adConfig?.socialBarTopScript
-  ]);
 
   useEffect(() => {
     if (isAdmin) {
@@ -1312,105 +1232,115 @@ export default function VideoDetail() {
           )}
         </div>
 
-        {/* Banner Ad Spot #1 (Below Video Player) */}
+        {/* Info & Actions Header - Now placed directly below the player */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <h1 className="text-2xl font-bold tracking-tight">{video.title}</h1>
+          <div className="flex items-center gap-2 shrink-0">
+            <button 
+              id="video-like-btn"
+              onClick={handleLike}
+              className={`flex items-center gap-2 px-4 py-2 border rounded-full transition-all text-sm font-medium ${
+                isLiked 
+                  ? 'bg-rose-600/10 border-rose-500 text-rose-500 hover:bg-rose-600/20 shadow-lg shadow-rose-600/5' 
+                  : 'bg-neutral-900 border-white/5 text-neutral-300 hover:bg-neutral-800'
+              }`}
+            >
+              <ThumbsUp className={`w-4 h-4 ${isLiked ? 'fill-current text-rose-500' : ''}`} /> 
+              <span>{isLiked ? 'Liked' : 'Like'} ({likeCount})</span>
+            </button>
+            <button 
+              id="video-share-btn"
+              onClick={() => {
+                navigator.clipboard.writeText(window.location.href);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-neutral-900 border border-white/5 rounded-full hover:bg-neutral-800 transition-colors text-sm font-medium text-neutral-300"
+            >
+              <Share2 className="w-4 h-4" /> {copied ? 'Copied!' : 'Share'}
+            </button>
+            <button 
+              id="video-save-btn"
+              onClick={handleSave}
+              className={`flex items-center gap-2 px-4 py-2 border rounded-full transition-all text-sm font-medium ${
+                isSaved 
+                  ? 'bg-rose-600/10 border-rose-500 text-rose-500 hover:bg-rose-600/20 shadow-lg shadow-rose-600/5' 
+                  : 'bg-neutral-900 border-white/5 text-neutral-300 hover:bg-neutral-800'
+              }`}
+            >
+              <Heart className={`w-4 h-4 ${isSaved ? 'fill-current text-rose-500' : ''}`} /> 
+              <span>{isSaved ? 'Saved' : 'Save'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Banner Ad Spot #1 (Below Title/Actions) */}
         {siteSettings?.adConfig?.enabled && siteSettings.adConfig.bannerScript && (
           <div className="w-full">
-            <div className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider mb-1">Advertisement</div>
+            <div className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider mb-1 text-center">Advertisement</div>
             <AdRenderer htmlCode={siteSettings.adConfig.bannerScript} />
           </div>
         )}
 
-        {/* Info & Actions */}
-        <div className="space-y-4">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <h1 className="text-2xl font-bold tracking-tight">{video.title}</h1>
-            <div className="flex items-center gap-2">
-              <button 
-                id="video-like-btn"
-                onClick={handleLike}
-                className={`flex items-center gap-2 px-4 py-2 border rounded-full transition-all text-sm font-medium ${
-                  isLiked 
-                    ? 'bg-rose-600/10 border-rose-500 text-rose-500 hover:bg-rose-600/20 shadow-lg shadow-rose-600/5' 
-                    : 'bg-neutral-900 border-white/5 text-neutral-300 hover:bg-neutral-800'
-                }`}
-              >
-                <ThumbsUp className={`w-4 h-4 ${isLiked ? 'fill-current text-rose-500' : ''}`} /> 
-                <span>{isLiked ? 'Liked' : 'Like'} ({likeCount})</span>
-              </button>
-              <button 
-                id="video-share-btn"
-                onClick={() => {
-                  navigator.clipboard.writeText(window.location.href);
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 2000);
-                }}
-                className="flex items-center gap-2 px-4 py-2 bg-neutral-900 border border-white/5 rounded-full hover:bg-neutral-800 transition-colors text-sm font-medium text-neutral-300"
-              >
-                <Share2 className="w-4 h-4" /> {copied ? 'Copied!' : 'Share'}
-              </button>
-              <button 
-                id="video-save-btn"
-                onClick={handleSave}
-                className={`flex items-center gap-2 px-4 py-2 border rounded-full transition-all text-sm font-medium ${
-                  isSaved 
-                    ? 'bg-rose-600/10 border-rose-500 text-rose-500 hover:bg-rose-600/20 shadow-lg shadow-rose-600/5' 
-                    : 'bg-neutral-900 border-white/5 text-neutral-300 hover:bg-neutral-800'
-                }`}
-              >
-                <Heart className={`w-4 h-4 ${isSaved ? 'fill-current text-rose-500' : ''}`} /> 
-                <span>{isSaved ? 'Saved' : 'Save'}</span>
-              </button>
-            </div>
+        {/* Sponsored Native Add (Below Title/Actions / Above Description Card) */}
+        {siteSettings?.adConfig?.enabled && siteSettings.adConfig.nativeBannerScript && (
+          <div className="w-full">
+            <div className="text-[10px] text-neutral-500 font-bold uppercase tracking-widest mb-1 text-center">Sponsored Native Add</div>
+            <AdRenderer htmlCode={siteSettings.adConfig.nativeBannerScript} />
+          </div>
+        )}
+
+        {/* Custom Extra Ads - Below Player (Positioned under Title/Actions) */}
+        <CustomAdsSpot settings={siteSettings} placement="video_below_player" isAdmin={isAdmin} />
+
+        {/* Info & Details Card */}
+        <div className="p-4 bg-neutral-900 rounded-xl border border-white/5 space-y-4">
+          <div className="flex items-center gap-4 text-sm font-medium">
+            <span className="text-white">{video.views.toLocaleString()} views</span>
+            <span className="text-neutral-500">•</span>
+            <span className="text-neutral-500">{formatDistanceToNow(video.createdAt)} ago</span>
+            <span className="bg-rose-600/10 text-rose-500 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider">
+              {video.categoryId}
+            </span>
+          </div>
+          <p className="text-neutral-400 text-sm leading-relaxed whitespace-pre-wrap">
+             {video.description}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {video.tags?.map(tag => (
+              <span key={tag} className="text-[10px] bg-neutral-800 px-2 py-1 rounded-md text-neutral-400">#{tag}</span>
+            ))}
           </div>
 
-          <div className="p-4 bg-neutral-900 rounded-xl border border-white/5 space-y-4">
-            <div className="flex items-center gap-4 text-sm font-medium">
-              <span className="text-white">{video.views.toLocaleString()} views</span>
-              <span className="text-neutral-500">•</span>
-              <span className="text-neutral-500">{formatDistanceToNow(video.createdAt)} ago</span>
-              <span className="bg-rose-600/10 text-rose-500 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider">
-                {video.categoryId}
+          {/* Direct Play/Download helper */}
+          <div className="p-4 bg-rose-950/20 border border-rose-500/20 rounded-2xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs text-rose-300 mt-4">
+            <div className="space-y-1 col-span-1">
+              <span className="font-bold flex items-center gap-1.5 text-rose-400">
+                <Play className="w-3.5 h-3.5 fill-current" /> প্লেয়ারে সমস্যা হলে (If player has issue)
               </span>
+              <p className="text-neutral-400 text-[11px] leading-relaxed">
+                ভিডিও লোড হতে সময় নিলে বা সমস্যা হলে আপনি সরাসরি নিচের লিংকে ক্লিক করে নতুন ট্যাবে প্লে অথবা ডাউনলোড করতে পারেন।
+              </p>
             </div>
-            <p className="text-neutral-400 text-sm leading-relaxed whitespace-pre-wrap">
-               {video.description}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {video.tags?.map(tag => (
-                <span key={tag} className="text-[10px] bg-neutral-800 px-2 py-1 rounded-md text-neutral-400">#{tag}</span>
-              ))}
-            </div>
-
-            {/* Direct Play/Download helper */}
-            <div className="p-4 bg-rose-950/20 border border-rose-500/20 rounded-2xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs text-rose-300 mt-4">
-              <div className="space-y-1 col-span-1">
-                <span className="font-bold flex items-center gap-1.5 text-rose-400">
-                  <Play className="w-3.5 h-3.5 fill-current" /> প্লেয়ারে সমস্যা হলে (If player has issue)
-                </span>
-                <p className="text-neutral-400 text-[11px] leading-relaxed">
-                  ভিডিও লোড হতে সময় নিলে বা সমস্যা হলে আপনি সরাসরি নিচের লিংকে ক্লিক করে নতুন ট্যাবে প্লে অথবা ডাউনলোড করতে পারেন।
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2 shrink-0 self-start sm:self-auto">
+            <div className="flex flex-wrap gap-2 shrink-0 self-start sm:self-auto">
+              <a 
+                href={video.videoUrl} 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 rounded-xl font-bold text-xs transition-colors border border-rose-500/30 shrink-0"
+              >
+                <ExternalLink className="w-3.5 h-3.5" /> সরাসরি প্লে করুন (Play Direct)
+              </a>
+              {siteSettings?.adConfig?.enabled && siteSettings.adConfig.smartlinkUrl && !isAdmin && (
                 <a 
-                  href={video.videoUrl} 
+                  href={siteSettings.adConfig.smartlinkUrl} 
                   target="_blank" 
                   rel="noopener noreferrer" 
-                  className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 rounded-xl font-bold text-xs transition-colors border border-rose-500/30 shrink-0"
+                  className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold text-xs transition-colors shadow-lg shadow-rose-600/20 border border-white/5 shrink-0"
                 >
-                  <ExternalLink className="w-3.5 h-3.5" /> সরাসরি প্লে করুন (Play Direct)
+                  ⚡ হাই স্পিড সার্ভার (HD Server 2)
                 </a>
-                {siteSettings?.adConfig?.enabled && siteSettings.adConfig.smartlinkUrl && !isAdmin && (
-                  <a 
-                    href={siteSettings.adConfig.smartlinkUrl} 
-                    target="_blank" 
-                    rel="noopener noreferrer" 
-                    className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold text-xs transition-colors shadow-lg shadow-rose-600/20 border border-white/5 shrink-0"
-                  >
-                    ⚡ হাই স্পিড সার্ভার (HD Server 2)
-                  </a>
-                )}
-              </div>
+              )}
             </div>
           </div>
         </div>
@@ -1482,10 +1412,13 @@ export default function VideoDetail() {
         {/* Native Banner Ad Spot */}
         {siteSettings?.adConfig?.enabled && siteSettings.adConfig.nativeBannerScript && (
           <div className="p-1 bg-neutral-900 border border-white/5 rounded-2xl">
-            <div className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider text-center py-1">Sponsored Native Ad</div>
+            <div className="text-[10px] text-neutral-500 font-bold uppercase tracking-widest text-center py-1">Sponsored Native Add</div>
             <AdRenderer htmlCode={siteSettings.adConfig.nativeBannerScript} />
           </div>
         )}
+
+        {/* Custom Extra Ads - Sidebar */}
+        <CustomAdsSpot settings={siteSettings} placement="video_sidebar" isAdmin={isAdmin} />
 
         <div className="flex flex-col gap-4">
           {relatedVideos.map((v) => (

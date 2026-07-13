@@ -1,8 +1,10 @@
-import React from 'react';
-import { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { seedDatabase } from './lib/seed';
+import { onSnapshot, doc } from 'firebase/firestore';
+import { db } from './lib/firebase';
+import { SiteSettings } from './types';
 import Home from './pages/Home';
 import VideoDetail from './pages/VideoDetail';
 import Search from './pages/Search';
@@ -31,6 +33,9 @@ const ProtectedRoute = ({ children, adminOnly = false }: { children: React.React
 };
 
 const AppContent = () => {
+  const { profile } = useAuth();
+  const [siteSettings, setSiteSettings] = useState<SiteSettings | null>(null);
+
   useEffect(() => {
     // Seed database if empty (safe to call, checks itself)
     seedDatabase().catch(err => {
@@ -41,6 +46,97 @@ const AppContent = () => {
       }
     });
   }, []);
+
+  useEffect(() => {
+    const unsubSettings = onSnapshot(doc(db, 'settings', 'general'), (docSnap) => {
+      if (docSnap.exists()) {
+        setSiteSettings(docSnap.data() as SiteSettings);
+      }
+    });
+    return () => unsubSettings();
+  }, []);
+
+  useEffect(() => {
+    const isAdmin = profile?.role === 'admin';
+    const scriptIds = ['ad-popunder', 'ad-socialbar', 'ad-popundertop', 'ad-socialbartop'];
+    
+    const removeExistingScripts = () => {
+      scriptIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.remove();
+      });
+      const customEls = document.querySelectorAll('[id^="ad-custom-"]');
+      customEls.forEach(el => el.remove());
+    };
+
+    if (isAdmin || !siteSettings?.adConfig?.enabled) {
+      removeExistingScripts();
+      return;
+    }
+
+    const adConfig = siteSettings.adConfig;
+    const scriptsToInject = [
+      { id: 'ad-popunder', code: adConfig.popunderScript },
+      { id: 'ad-socialbar', code: adConfig.socialBarScript },
+      { id: 'ad-popundertop', code: adConfig.popunderTopScript },
+      { id: 'ad-socialbartop', code: adConfig.socialBarTopScript }
+    ];
+
+    // Add enabled global custom ads
+    if (adConfig.customAds && Array.isArray(adConfig.customAds)) {
+      adConfig.customAds.forEach((ad: any) => {
+        if (ad.placement === 'global' && ad.enabled && ad.code) {
+          scriptsToInject.push({
+            id: `ad-custom-${ad.id}`,
+            code: ad.code
+          });
+        }
+      });
+    }
+
+    scriptsToInject.forEach(({ id, code }) => {
+      if (!code || document.getElementById(id)) return;
+
+      const wrapper = document.createElement('div');
+      wrapper.id = id;
+      wrapper.style.display = 'none';
+
+      try {
+        const parser = new DOMParser();
+        const parsedDoc = parser.parseFromString(code, 'text/html');
+        const nodes = Array.from(parsedDoc.body.childNodes);
+
+        nodes.forEach(node => {
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            const el = node as HTMLElement;
+            if (el.tagName.toLowerCase() === 'script') {
+              const newScript = document.createElement('script');
+              Array.from(el.attributes).forEach(attr => {
+                newScript.setAttribute(attr.name, attr.value);
+              });
+              newScript.text = el.textContent || '';
+              wrapper.appendChild(newScript);
+            } else {
+              const cloned = el.cloneNode(true);
+              wrapper.appendChild(cloned);
+            }
+          } else if (node.nodeType === Node.TEXT_NODE) {
+            wrapper.appendChild(document.createTextNode(node.textContent || ''));
+          }
+        });
+      } catch (err) {
+        const fallbackScript = document.createElement('script');
+        fallbackScript.innerHTML = code;
+        wrapper.appendChild(fallbackScript);
+      }
+
+      document.body.appendChild(wrapper);
+    });
+
+    return () => {
+      removeExistingScripts();
+    };
+  }, [profile, siteSettings]);
 
   return (
     <Router>

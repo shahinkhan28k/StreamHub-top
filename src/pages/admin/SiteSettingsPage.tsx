@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
-import { SiteSettings, MenuItem, SubMenuItem } from '../../types';
+import { SiteSettings, MenuItem, SubMenuItem, CustomAd } from '../../types';
 import { 
   Settings as SettingsIcon, Globe, Palette, Shield, Share2, Save, 
   Sparkles, Layout, Check, Megaphone, ExternalLink, Code, Clock,
@@ -23,6 +23,40 @@ export default function SiteSettingsPage() {
   const [newMenuLink, setNewMenuLink] = useState('');
   const [newSubMenuLabel, setNewSubMenuLabel] = useState<{[key: string]: string}>({});
   const [newSubMenuLink, setNewSubMenuLink] = useState<{[key: string]: string}>({});
+
+  // Custom Extra Ads state
+  const [customAds, setCustomAds] = useState<CustomAd[]>([]);
+  const [newAdName, setNewAdName] = useState('');
+  const [newAdCode, setNewAdCode] = useState('');
+  const [newAdPlacement, setNewAdPlacement] = useState<CustomAd['placement']>('global');
+
+  const addCustomAd = () => {
+    if (!newAdName.trim() || !newAdCode.trim()) return;
+    const newAd: CustomAd = {
+      id: Date.now().toString(),
+      name: newAdName.trim(),
+      code: newAdCode.trim(),
+      placement: newAdPlacement,
+      enabled: true
+    };
+    setCustomAds([...customAds, newAd]);
+    setNewAdName('');
+    setNewAdCode('');
+    setNewAdPlacement('global');
+  };
+
+  const removeCustomAd = (id: string) => {
+    setCustomAds(customAds.filter(ad => ad.id !== id));
+  };
+
+  const toggleCustomAd = (id: string) => {
+    setCustomAds(customAds.map(ad => ad.id === id ? { ...ad, enabled: !ad.enabled } : ad));
+  };
+
+  const updateCustomAdCode = (id: string, code: string) => {
+    setCustomAds(customAds.map(ad => ad.id === id ? { ...ad, code } : ad));
+  };
+
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -52,6 +86,7 @@ export default function SiteSettingsPage() {
           { id: '3', label: 'Sports', link: '/category/sports' },
           { id: '4', label: 'Gaming', link: '/category/gaming' }
         ]);
+        setCustomAds(savedData.adConfig?.customAds || []);
 
         const adConfigMerged = {
           enabled: savedData.adConfig?.enabled ?? false,
@@ -101,6 +136,7 @@ export default function SiteSettingsPage() {
           { id: '4', label: 'Gaming', link: '/category/gaming' }
         ];
         setMenuItems(defaultMenu);
+        setCustomAds([]);
         reset({
           siteName: 'Deshi Hubx',
           primaryColor: '#e11d48',
@@ -138,6 +174,10 @@ export default function SiteSettingsPage() {
     setLoading(true);
     const updatedData = {
       ...data,
+      adConfig: {
+        ...data.adConfig,
+        customAds: customAds
+      },
       navigationMenu: menuItems
     };
     await setDoc(doc(db, 'settings', 'general'), updatedData);
@@ -679,6 +719,135 @@ export default function SiteSettingsPage() {
                   placeholder="https://example.com/smartlink"
                   className="w-full bg-neutral-800 border border-white/5 rounded-xl py-3 px-4 focus:outline-none focus:border-rose-500 transition-colors font-mono text-xs" 
                 />
+              </div>
+            </div>
+
+            {/* Unlimited Extra Custom Ads */}
+            <div className="border-t border-white/5 pt-6 space-y-6">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-bold text-rose-500 uppercase tracking-wider flex items-center gap-2">
+                    <Megaphone className="w-4 h-4 text-rose-500" /> অতিরিক্ত আনলিমিটেড বিজ্ঞাপন প্লেসমেন্ট (Manage Extra Custom Ads)
+                  </h3>
+                  <p className="text-xs text-neutral-500 mt-1">
+                    উপরে উল্লেখিত বিজ্ঞাপনগুলোর বাইরে আপনি আপনার ইচ্ছামতো আরো যত খুশি বিজ্ঞাপন কোড এখানে যুক্ত করে সংশ্লিষ্ট পেজে দেখাতে পারবেন। (Add any number of custom additional ad scripts/banners and choose exactly where they render.)
+                  </p>
+                </div>
+              </div>
+
+              {/* Add New Custom Ad */}
+              <div className="bg-neutral-950/60 p-6 rounded-2xl border border-white/5 space-y-4">
+                <h4 className="text-xs font-black text-white uppercase tracking-widest">নতুন বিজ্ঞাপন যুক্ত করুন (Add New Custom Ad Spot)</h4>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">বিজ্ঞাপনের নাম (Ad Name / Label)</label>
+                    <input 
+                      type="text"
+                      placeholder="e.g., Header Banner Spot 2"
+                      value={newAdName}
+                      onChange={(e) => setNewAdName(e.target.value)}
+                      className="w-full bg-neutral-800 border border-white/5 rounded-xl py-2.5 px-3 text-xs focus:outline-none focus:border-rose-500 text-white"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">কোথায় দেখাবেন? (Placement Position)</label>
+                    <select
+                      value={newAdPlacement}
+                      onChange={(e) => setNewAdPlacement(e.target.value as CustomAd['placement'])}
+                      className="w-full bg-neutral-800 border border-white/5 rounded-xl py-2.5 px-3 text-xs focus:outline-none focus:border-rose-500 text-white"
+                    >
+                      <option value="global">Global Background / Script (সমস্ত পেজ - ব্যাকগ্রাউন্ড)</option>
+                      <option value="home_top">Homepage Top (হোমপেজ উপরে)</option>
+                      <option value="home_bottom">Homepage Bottom (হোমপেজ নিচে)</option>
+                      <option value="video_below_player">Video Detail Below Player (ভিডিও প্লেয়ার নিচে)</option>
+                      <option value="video_sidebar">Video Detail Sidebar (ভিডিও সাইডবার ডানে)</option>
+                      <option value="category_top">Category Page Top (ক্যাটাগরি পেজ উপরে)</option>
+                      <option value="search_top">Search Page Top (সার্চ পেজ উপরে)</option>
+                      <option value="profile_top">Profile Page Top (প্রোফাইল পেজ উপরে)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">বিজ্ঞাপন স্ক্রিপ্ট কোড / আইফ্রেম / এইচটিএমএল (Ad Script / Iframe / HTML Code)</label>
+                  <textarea
+                    rows={4}
+                    placeholder="বিজ্ঞাপন কোডটি এখানে পেস্ট করুন (Paste <script>, <iframe>, or html code here...)"
+                    value={newAdCode}
+                    onChange={(e) => setNewAdCode(e.target.value)}
+                    className="w-full bg-neutral-800 border border-white/5 rounded-xl py-3 px-4 focus:outline-none focus:border-rose-500 transition-colors font-mono text-xs text-emerald-400"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={addCustomAd}
+                  className="flex items-center gap-1.5 px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all"
+                >
+                  <Plus className="w-4 h-4" /> বিজ্ঞাপন যুক্ত করুন (Add Ad Spot)
+                </button>
+              </div>
+
+              {/* List of Current Custom Ads */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-black text-neutral-300 uppercase tracking-widest">যুক্ত করা অতিরিক্ত বিজ্ঞাপনসমূহ ({customAds.length})</h4>
+                
+                {customAds.length === 0 ? (
+                  <div className="text-center py-8 bg-neutral-950/20 border border-dashed border-white/5 rounded-2xl text-xs text-neutral-500">
+                    কোনো অতিরিক্ত বিজ্ঞাপন এখনো যুক্ত করা হয়নি। (No custom extra ads added yet.)
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-4">
+                    {customAds.map((ad) => (
+                      <div key={ad.id} className="bg-neutral-950/50 p-5 rounded-2xl border border-white/5 space-y-4">
+                        <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs font-bold text-rose-500">{ad.name}</span>
+                            <span className="px-2 py-0.5 bg-rose-500/10 text-rose-400 text-[10px] rounded font-semibold uppercase tracking-wider">
+                              {ad.placement.replace(/_/g, ' ')}
+                            </span>
+                          </div>
+                          
+                          <div className="flex items-center gap-4">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <div className="relative">
+                                <input 
+                                  type="checkbox" 
+                                  checked={ad.enabled}
+                                  onChange={() => toggleCustomAd(ad.id)}
+                                  className="peer sr-only" 
+                                />
+                                <div className="w-8 h-5 bg-neutral-800 rounded-full transition-colors peer-checked:bg-emerald-500" />
+                                <div className="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-3" />
+                              </div>
+                              <span className="text-[11px] text-neutral-400 font-semibold">{ad.enabled ? 'সক্রিয়' : 'বন্ধ'}</span>
+                            </label>
+
+                            <button 
+                              type="button" 
+                              onClick={() => removeCustomAd(ad.id)} 
+                              className="p-1.5 hover:bg-rose-500/10 text-neutral-500 hover:text-rose-500 rounded-lg transition-colors"
+                              title="বিজ্ঞাপন মুছুন"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-neutral-500 uppercase">কোড সম্পাদনা করুন (Edit Ad Code)</label>
+                          <textarea
+                            rows={3}
+                            value={ad.code}
+                            onChange={(e) => updateCustomAdCode(ad.id, e.target.value)}
+                            className="w-full bg-neutral-900 border border-white/5 rounded-xl py-2 px-3 focus:outline-none focus:border-rose-500 transition-colors font-mono text-xs text-emerald-400/80"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 

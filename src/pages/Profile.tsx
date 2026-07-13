@@ -3,11 +3,13 @@ import { User, Mail, Shield, Clock, Heart, History, LogOut, ChevronLeft } from '
 import { auth } from '../lib/firebase';
 import { useNavigate, Link } from 'react-router-dom';
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, limit, getDocs, orderBy } from 'firebase/firestore';
+import { collection, query, where, limit, getDocs, orderBy, doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { Video } from '../types';
+import { Video, SiteSettings } from '../types';
 import VideoCard from '../components/VideoCard';
 import { motion } from 'motion/react';
+import AdRenderer from '../components/AdRenderer';
+import CustomAdsSpot from '../components/CustomAdsSpot';
 
 export default function Profile() {
   const { user, profile, isAdmin } = useAuth();
@@ -15,6 +17,17 @@ export default function Profile() {
   const [favorites, setFavorites] = useState<Video[]>([]);
   const [history, setHistory] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
+  const [siteSettings, setSiteSettings] = useState<SiteSettings | null>(null);
+
+  useEffect(() => {
+    // Fetch Site Settings for ads
+    const unsubSettings = onSnapshot(doc(db, 'settings', 'general'), (docSnap) => {
+      if (docSnap.exists()) {
+        setSiteSettings(docSnap.data() as SiteSettings);
+      }
+    });
+    return () => unsubSettings();
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -101,6 +114,17 @@ export default function Profile() {
           </div>
         </div>
       </section>
+
+      {/* Custom Extra Ads - Profile Top */}
+      <CustomAdsSpot settings={siteSettings} placement="profile_top" />
+
+      {/* Sponsored Native Add Spot */}
+      {siteSettings?.adConfig?.enabled && siteSettings.adConfig.nativeBannerScript && (
+        <div className="w-full">
+          <div className="text-center text-[10px] text-neutral-500 mb-1 font-bold uppercase tracking-widest">Sponsored Native Add</div>
+          <AdRenderer htmlCode={siteSettings.adConfig.nativeBannerScript} />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
         {/* Favorite Videos */}

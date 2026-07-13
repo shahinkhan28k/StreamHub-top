@@ -122,5 +122,14 @@ export interface SiteSettings {
     promoDesc3?: string;
     promoLink3?: string;
     promoIcon3?: string;
+    customAds?: CustomAd[];
   };
+}
+
+export interface CustomAd {
+  id: string;
+  name: string;
+  code: string;
+  placement: 'global' | 'home_top' | 'home_bottom' | 'video_below_player' | 'video_sidebar' | 'category_top' | 'search_top' | 'profile_top';
+  enabled: boolean;
 }

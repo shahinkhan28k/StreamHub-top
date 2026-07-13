@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { Video } from '../types';
+import { Video, SiteSettings } from '../types';
 import VideoCard from '../components/VideoCard';
 import { Search as SearchIcon, Filter, SlidersHorizontal, ChevronLeft } from 'lucide-react';
+import AdRenderer from '../components/AdRenderer';
+import CustomAdsSpot from '../components/CustomAdsSpot';
 
 export default function Search() {
   const navigate = useNavigate();
@@ -13,6 +15,17 @@ export default function Search() {
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState('All');
+  const [siteSettings, setSiteSettings] = useState<SiteSettings | null>(null);
+
+  useEffect(() => {
+    // Fetch Site Settings for ads
+    const unsubSettings = onSnapshot(doc(db, 'settings', 'general'), (docSnap) => {
+      if (docSnap.exists()) {
+        setSiteSettings(docSnap.data() as SiteSettings);
+      }
+    });
+    return () => unsubSettings();
+  }, []);
 
   useEffect(() => {
     const fetchVideos = async () => {
@@ -85,6 +98,17 @@ export default function Search() {
           ))}
         </div>
       </div>
+
+      {/* Custom Extra Ads - Search Top */}
+      <CustomAdsSpot settings={siteSettings} placement="search_top" />
+
+      {/* Sponsored Native Add Spot */}
+      {siteSettings?.adConfig?.enabled && siteSettings.adConfig.nativeBannerScript && (
+        <div className="w-full">
+          <div className="text-center text-[10px] text-neutral-500 mb-1 font-bold uppercase tracking-widest">Sponsored Native Add</div>
+          <AdRenderer htmlCode={siteSettings.adConfig.nativeBannerScript} />
+        </div>
+      )}
 
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">

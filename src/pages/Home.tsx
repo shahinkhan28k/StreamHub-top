@@ -9,6 +9,7 @@ import { getStoredVideos, subscribeStoredVideos } from '../lib/videoStore';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import AdRenderer from '../components/AdRenderer';
+import CustomAdsSpot from '../components/CustomAdsSpot';
 import { useAuth } from '../context/AuthContext';
 
 export default function Home() {
@@ -64,87 +65,6 @@ export default function Home() {
     };
   }, []);
 
-  useEffect(() => {
-    // Clean up existing injected ad scripts if user is admin or ads are disabled
-    const scriptIds = ['ad-popunder', 'ad-socialbar', 'ad-popundertop', 'ad-socialbartop'];
-    
-    if (isAdmin || !siteSettings?.adConfig?.enabled) {
-      scriptIds.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.remove();
-      });
-      return;
-    }
-
-    const adConfig = siteSettings.adConfig;
-    const scriptsToInject = [
-      { id: 'ad-popunder', code: adConfig.popunderScript },
-      { id: 'ad-socialbar', code: adConfig.socialBarScript },
-      { id: 'ad-popundertop', code: adConfig.popunderTopScript },
-      { id: 'ad-socialbartop', code: adConfig.socialBarTopScript }
-    ];
-
-    scriptsToInject.forEach(({ id, code }) => {
-      if (!code || document.getElementById(id)) return;
-
-      // Create a wrapper block to hold all script tags & markup
-      const wrapper = document.createElement('div');
-      wrapper.id = id;
-      wrapper.style.display = 'none';
-
-      // Parse with DOMParser to handle multiple tags, styling, etc.
-      try {
-        const parser = new DOMParser();
-        const parsedDoc = parser.parseFromString(code, 'text/html');
-        const nodes = Array.from(parsedDoc.body.childNodes);
-
-        nodes.forEach(node => {
-          if (node.nodeType === Node.ELEMENT_NODE) {
-            const el = node as HTMLElement;
-            if (el.tagName.toLowerCase() === 'script') {
-              const newScript = document.createElement('script');
-              // Copy all attributes securely
-              Array.from(el.attributes).forEach(attr => {
-                newScript.setAttribute(attr.name, attr.value);
-              });
-              // Copy internal text/content
-              newScript.text = el.textContent || '';
-              wrapper.appendChild(newScript);
-            } else {
-              // Copy any other elements like style blocks or divs
-              const cloned = el.cloneNode(true);
-              wrapper.appendChild(cloned);
-            }
-          } else if (node.nodeType === Node.TEXT_NODE) {
-            wrapper.appendChild(document.createTextNode(node.textContent || ''));
-          }
-        });
-      } catch (err) {
-        // Fallback to simple script element in case parsing fails
-        const fallbackScript = document.createElement('script');
-        fallbackScript.innerHTML = code;
-        wrapper.appendChild(fallbackScript);
-      }
-
-      document.body.appendChild(wrapper);
-    });
-
-    return () => {
-      // Cleanup on unmount or when dependencies change
-      scriptIds.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.remove();
-      });
-    };
-  }, [
-    isAdmin,
-    siteSettings?.adConfig?.enabled,
-    siteSettings?.adConfig?.popunderScript,
-    siteSettings?.adConfig?.socialBarScript,
-    siteSettings?.adConfig?.popunderTopScript,
-    siteSettings?.adConfig?.socialBarTopScript
-  ]);
-
   const getCategoriesFromMenu = () => {
     const menu = siteSettings?.navigationMenu || [
       { id: '1', label: 'Home', link: '/' },
@@ -166,6 +86,11 @@ export default function Home() {
 
   return (
     <div className="space-y-12">
+      {/* Custom Ads Spot - Homepage Top */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <CustomAdsSpot settings={siteSettings} placement="home_top" isAdmin={isAdmin} />
+      </div>
+
       {/* Smartlink Top Alert Bar */}
       {siteSettings?.adConfig?.enabled && siteSettings.adConfig.smartlinkUrl && !isAdmin && (
         <div className="bg-rose-600/10 border-b border-rose-500/20 text-rose-500 py-3 px-4 text-center text-xs font-semibold flex items-center justify-center gap-2 animate-pulse">
@@ -347,6 +272,10 @@ export default function Home() {
           </div>
         </section>
       )}
+      {/* Custom Ads Spot - Homepage Bottom */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <CustomAdsSpot settings={siteSettings} placement="home_bottom" isAdmin={isAdmin} />
+      </div>
     </div>
   );
 }
