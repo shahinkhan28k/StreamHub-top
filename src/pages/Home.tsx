@@ -11,11 +11,13 @@ import { db } from '../lib/firebase';
 import AdRenderer from '../components/AdRenderer';
 import CustomAdsSpot from '../components/CustomAdsSpot';
 import { useAuth } from '../context/AuthContext';
+import { resolveMediaUrl } from '../lib/indexedDb';
 
 export default function Home() {
   useSEO('Home - Deshi Hubx', 'Stream premium videos and entertainment content on Deshi Hubx - Premium Collection.');
   const { isAdmin } = useAuth();
   const [featuredVideo, setFeaturedVideo] = useState<Video | null>(null);
+  const [resolvedFeaturedThumb, setResolvedFeaturedThumb] = useState<string>('');
   const [trendingVideos, setTrendingVideos] = useState<Video[]>([]);
   const [latestVideos, setLatestVideos] = useState<Video[]>([]);
   const [siteSettings, setSiteSettings] = useState<SiteSettings | null>(null);
@@ -64,6 +66,24 @@ export default function Home() {
       unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    const resolveThumb = async () => {
+      if (featuredVideo?.thumbnail) {
+        const url = await resolveMediaUrl(featuredVideo.thumbnail);
+        if (active) {
+          setResolvedFeaturedThumb(url);
+        }
+      } else {
+        if (active) setResolvedFeaturedThumb('');
+      }
+    };
+    resolveThumb();
+    return () => {
+      active = false;
+    };
+  }, [featuredVideo]);
 
   const getCategoriesFromMenu = () => {
     const menu = siteSettings?.navigationMenu || [
@@ -116,7 +136,7 @@ export default function Home() {
             {/* Background Image with Ken Burns / Zoom Effect on hover */}
             <div className="absolute inset-0 select-none pointer-events-none overflow-hidden">
               <img 
-                src={featuredVideo.thumbnail} 
+                src={resolvedFeaturedThumb || featuredVideo.thumbnail} 
                 alt={featuredVideo.title}
                 className="w-full h-full object-cover transition-transform duration-[6000ms] hover:scale-105"
               />

@@ -12,6 +12,7 @@ import { useForm } from 'react-hook-form';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { getStoredVideos, saveStoredVideo, deleteStoredVideo, subscribeStoredVideos } from '../../lib/videoStore';
+import { storeLocalMedia } from '../../lib/indexedDb';
 import AdminSidebar from '../../components/AdminSidebar';
 import { ChevronLeft } from 'lucide-react';
 import Hls from 'hls.js';
@@ -177,13 +178,15 @@ export default function VideoManagement() {
       tags: '',
       published: true,
       featured: false,
-      locked: false
+      locked: false,
+      uploadStorageType: 'local'
     }
   });
 
   const videoFileRef = useRef<HTMLInputElement>(null);
   const thumbFileRef = useRef<HTMLInputElement>(null);
   const videoSourceType = watch('videoSourceType') || 'url';
+  const uploadStorageType = watch('uploadStorageType') || 'local';
   const watchedCategoryId = watch('categoryId');
   const currentCategoryObj = getCategoriesFromMenu().find((c: any) => c.id === watchedCategoryId);
   const hasSubmenus = currentCategoryObj && currentCategoryObj.subMenus && currentCategoryObj.subMenus.length > 0;
@@ -414,10 +417,59 @@ export default function VideoManagement() {
 
   const fileToBase64 = (file: File | Blob): Promise<string> => {
     return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = (error) => reject(error);
+      // Create an image element
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
+      img.src = objectUrl;
+
+      img.onload = () => {
+        // Clean up object URL
+        URL.revokeObjectURL(objectUrl);
+
+        // Max target width / height for thumbnail
+        const MAX_WIDTH = 640;
+        const MAX_HEIGHT = 360; // 16:9 ratio target
+        let width = img.width;
+        let height = img.height;
+
+        // Calculate new dimensions preserving ratio
+        if (width > MAX_WIDTH) {
+          height = Math.round((height * MAX_WIDTH) / width);
+          width = MAX_WIDTH;
+        }
+        if (height > MAX_HEIGHT) {
+          width = Math.round((width * MAX_HEIGHT) / height);
+          height = MAX_HEIGHT;
+        }
+
+        // Setup canvas for downscaling
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          // Export as compressed JPEG (0.7 quality is extremely lightweight, around 20-40KB, and looks pristine)
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+          resolve(dataUrl);
+        } else {
+          // Fallback to simple FileReader if canvas context is unavailable
+          const reader = new FileReader();
+          reader.readAsDataURL(file);
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = (error) => reject(error);
+        }
+      };
+
+      img.onerror = (err) => {
+        URL.revokeObjectURL(objectUrl);
+        // Fallback to standard Base64 FileReader on load error
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = (error) => reject(error);
+      };
     });
   };
 
@@ -527,11 +579,32 @@ export default function VideoManagement() {
         // Handle Video File Upload
         const videoFile = videoFileRef.current?.files?.[0];
         if (videoFile) {
-          try {
-            videoUrl = await uploadFile(videoFile, 'videos');
-          } catch (uploadErr: any) {
-            console.error("Video upload error:", uploadErr);
-            throw new Error(`STORAGE_VIDEO_FAILED: ${uploadErr?.message || 'Access Denied'}`);
+          if (data.uploadStorageType === 'firebase') {
+            try {
+              videoUrl = await uploadFile(videoFile, 'videos');
+            } catch (uploadErr: any) {
+              console.warn("Firebase Storage upload blocked or failed for video. Falling back to local IndexedDB.", uploadErr);
+              try {
+                const fileKey = `video-${Date.now()}-${videoFile.name.replace(/[^a-zA-Z0-9]/g, '_')}`;
+                videoUrl = await storeLocalMedia(fileKey, videoFile);
+                alert(
+                  "ℹ️ ফায়ারবেস স্টোরেজ ব্লক বা নিষ্ক্রিয় থাকায় ভিডিও ফাইলটি আপনার ব্রাউজারের লোকাল স্টোরেজে (IndexedDB) সফলভাবে সেভ করা হয়েছে!\n\n" +
+                  "⚠️ সতর্কবার্তা: এটি আপনার নিজস্ব ব্রাউজারে সুন্দরভাবে চলবে। তবে অন্যান্য ভিজিটররা এই ভিডিওটি দেখতে পারবে না, কারণ ফাইলটি তাদের ব্রাউজারে নেই। সাধারণ ভিজিটরদের দেখার জন্য দয়া করে গুগল ড্রাইভ, ড্রপবক্স, বা ইউটিউব ভিডিওর সরাসরি লিংক পেস্ট করে যুক্ত করুন!"
+                );
+              } catch (idbErr) {
+                console.error("Local IndexedDB store failed:", idbErr);
+                throw new Error(`STORAGE_VIDEO_FAILED: ${uploadErr?.message || 'Access Denied'}`);
+              }
+            }
+          } else {
+            // Direct Local IndexedDB save
+            try {
+              const fileKey = `video-${Date.now()}-${videoFile.name.replace(/[^a-zA-Z0-9]/g, '_')}`;
+              videoUrl = await storeLocalMedia(fileKey, videoFile);
+            } catch (idbErr: any) {
+              console.error("Local IndexedDB store failed:", idbErr);
+              throw new Error(`STORAGE_VIDEO_FAILED: Local IndexedDB storage full or unsupported: ${idbErr?.message || ''}`);
+            }
           }
         }
 
@@ -545,22 +618,41 @@ export default function VideoManagement() {
       // Handle Thumbnail File Upload
       const thumbFile = thumbFileRef.current?.files?.[0];
       if (thumbFile) {
-        try {
-          thumbnailUrl = await uploadFile(thumbFile, 'thumbnails');
-        } catch (uploadErr: any) {
-          console.warn("Firebase Storage upload blocked or failed for thumbnail. Falling back to local Base64/DataURL.", uploadErr);
+        if (data.uploadStorageType === 'firebase') {
+          try {
+            thumbnailUrl = await uploadFile(thumbFile, 'thumbnails');
+          } catch (uploadErr: any) {
+            console.warn("Firebase Storage upload blocked or failed for thumbnail. Falling back to local Base64/DataURL.", uploadErr);
+            try {
+              thumbnailUrl = await fileToBase64(thumbFile);
+            } catch (b64Err) {
+              console.error("Base64 conversion failed", b64Err);
+              throw new Error(`STORAGE_THUMBNAIL_FAILED: ${uploadErr?.message || 'Access Denied'}`);
+            }
+          }
+        } else {
+          // Direct local Base64/DataURL
           try {
             thumbnailUrl = await fileToBase64(thumbFile);
-          } catch (b64Err) {
+          } catch (b64Err: any) {
             console.error("Base64 conversion failed", b64Err);
-            throw new Error(`STORAGE_THUMBNAIL_FAILED: ${uploadErr?.message || 'Access Denied'}`);
+            throw new Error(`STORAGE_THUMBNAIL_FAILED: Local processing failed: ${b64Err?.message || ''}`);
           }
         }
       } else if ((!thumbnailUrl || thumbnailUrl === '(Auto-generated from Video)') && autoThumbnailBlob) {
-        try {
-          thumbnailUrl = await uploadFile(autoThumbnailBlob, 'thumbnails', 'auto_thumbnail.jpg');
-        } catch (uploadErr: any) {
-          console.warn("Firebase Storage upload blocked or failed for auto thumbnail. Falling back to local Base64/DataURL.", uploadErr);
+        if (data.uploadStorageType === 'firebase') {
+          try {
+            thumbnailUrl = await uploadFile(autoThumbnailBlob, 'thumbnails', 'auto_thumbnail.jpg');
+          } catch (uploadErr: any) {
+            console.warn("Firebase Storage upload blocked or failed for auto thumbnail. Falling back to local Base64/DataURL.", uploadErr);
+            try {
+              thumbnailUrl = await fileToBase64(autoThumbnailBlob);
+            } catch (b64Err) {
+              console.error("Base64 conversion failed for auto-thumbnail", b64Err);
+            }
+          }
+        } else {
+          // Direct local Base64/DataURL for auto-thumbnail
           try {
             thumbnailUrl = await fileToBase64(autoThumbnailBlob);
           } catch (b64Err) {
@@ -1003,6 +1095,23 @@ export default function VideoManagement() {
                     <label className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl border text-xs font-bold uppercase cursor-pointer transition-all ${videoSourceType === 'embed' ? 'bg-rose-600/10 border-rose-500 text-white' : 'bg-neutral-800 border-white/5 text-neutral-400 hover:text-neutral-200'}`}>
                       <input type="radio" value="embed" {...register('videoSourceType')} className="sr-only" />
                       <span>HTML Embed Code (Iframe)</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="space-y-2 md:col-span-2 bg-neutral-950/40 p-4 rounded-2xl border border-white/5">
+                  <label className="text-xs font-bold text-neutral-400 uppercase tracking-widest block mb-3">ফাইল আপলোড স্টোরেজ টাইপ (File Upload Storage Type)</label>
+                  <p className="text-[11px] text-neutral-400 mb-2 leading-relaxed">
+                    সরাসরি ফাইল আপলোড করার সময় সেটি কোথায় সেভ হবে তা নির্বাচন করুন। লোকাল হোস্টিং/ফায়ারবেস ইরর এড়াতে <span className="font-bold text-emerald-400">Local Browser Storage</span> রিকমেন্ডেড!
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl border text-xs font-bold uppercase cursor-pointer transition-all ${uploadStorageType === 'local' ? 'bg-emerald-600/10 border-emerald-500 text-white' : 'bg-neutral-800 border-white/5 text-neutral-400 hover:text-neutral-200'}`}>
+                      <input type="radio" value="local" {...register('uploadStorageType')} className="sr-only" />
+                      <span>Local Browser Storage (IndexedDB)</span>
+                    </label>
+                    <label className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl border text-xs font-bold uppercase cursor-pointer transition-all ${uploadStorageType === 'firebase' ? 'bg-rose-600/10 border-rose-500 text-white' : 'bg-neutral-800 border-white/5 text-neutral-400 hover:text-neutral-200'}`}>
+                      <input type="radio" value="firebase" {...register('uploadStorageType')} className="sr-only" />
+                      <span>Firebase Cloud Storage</span>
                     </label>
                   </div>
                 </div>

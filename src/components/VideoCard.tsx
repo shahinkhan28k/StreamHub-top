@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Play, Eye, Clock, Calendar, Lock } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { Video } from '../types';
 import { motion } from 'motion/react';
+import { resolveMediaUrl } from '../lib/indexedDb';
 
 interface VideoCardProps {
   video: Video;
@@ -11,6 +12,25 @@ interface VideoCardProps {
 
 const VideoCard: React.FC<{ video: Video }> = ({ video }) => {
   const [imgError, setImgError] = React.useState(false);
+  const [resolvedThumbnail, setResolvedThumbnail] = useState<string>('');
+
+  useEffect(() => {
+    let active = true;
+    const loadThumbnail = async () => {
+      if (video.thumbnail) {
+        const url = await resolveMediaUrl(video.thumbnail);
+        if (active) {
+          setResolvedThumbnail(url);
+        }
+      } else {
+        if (active) setResolvedThumbnail('');
+      }
+    };
+    loadThumbnail();
+    return () => {
+      active = false;
+    };
+  }, [video.thumbnail]);
 
   return (
     <div
@@ -18,9 +38,9 @@ const VideoCard: React.FC<{ video: Video }> = ({ video }) => {
     >
       <Link to={`/video/${video.id}`}>
         <div className="relative aspect-video overflow-hidden bg-neutral-950">
-          {!imgError && video.thumbnail ? (
+          {!imgError && resolvedThumbnail ? (
             <img
-              src={video.thumbnail}
+              src={resolvedThumbnail}
               alt={video.title}
               className="w-full h-full object-cover transition-transform duration-500 md:group-hover:scale-110"
               loading="lazy"

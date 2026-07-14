@@ -17,6 +17,7 @@ import { getSingleStoredVideo, getStoredVideos } from '../lib/videoStore';
 import AdRenderer from '../components/AdRenderer';
 import CustomAdsSpot from '../components/CustomAdsSpot';
 import Hls from 'hls.js';
+import { resolveMediaUrl } from '../lib/indexedDb';
 
 // Preprocess URLs to ensure standard cloud drives return direct media streaming streams or clean embed src
 function preprocessVideoUrl(url: string): string {
@@ -55,7 +56,7 @@ function isDirectVideoUrl(url: string): boolean {
   if (trimmed.includes('firebasestorage.googleapis.com')) return true;
   
   // Local files / Blobs
-  if (trimmed.startsWith('/') || trimmed.startsWith('file://') || trimmed.startsWith('blob:')) return true;
+  if (trimmed.startsWith('/') || trimmed.startsWith('file://') || trimmed.startsWith('blob:') || trimmed.startsWith('indexeddb://')) return true;
 
   // Dropbox with raw=1 is a direct video file
   if (trimmed.includes('dropbox.com') && trimmed.includes('raw=1')) return true;
@@ -355,28 +356,41 @@ export default function VideoDetail() {
   useEffect(() => {
     if (!id || !video) return;
 
-    const params = new URLSearchParams(window.location.search);
+    let searchString = window.location.search;
+    if (!searchString && window.location.hash.includes('?')) {
+      const parts = window.location.hash.split('?');
+      searchString = parts[1] ? '?' + parts[1] : '';
+    }
+    const params = new URLSearchParams(searchString);
     const panelLike = params.get('panel_like') === 'true' || params.get('autolike') === 'true' || params.get('action') === 'like';
     const forceLike = params.get('force_like') === 'true' || params.get('add_like') === 'true' || params.get('like') === '1';
 
     if (forceLike) {
       handleForceLike();
       // Clean query parameters from address bar to prevent double triggers on reload
-      const cleanUrl = new URL(window.location.href);
-      cleanUrl.searchParams.delete('force_like');
-      cleanUrl.searchParams.delete('add_like');
-      cleanUrl.searchParams.delete('like');
-      window.history.replaceState({}, '', cleanUrl.toString());
+      const href = window.location.href;
+      let cleanHref = href
+        .replace(/[?&]force_like=[^&]*/g, '')
+        .replace(/[?&]add_like=[^&]*/g, '')
+        .replace(/[?&]like=[^&]*/g, '')
+        .replace(/\?&/g, '?')
+        .replace(/\?$/g, '')
+        .replace(/#\?/, '#');
+      window.history.replaceState({}, '', cleanHref);
     } else if (panelLike) {
       const likedVideos = JSON.parse(safeLocalStorage.getItem('likedVideos') || '[]');
       if (!likedVideos.includes(id)) {
         handleLike();
       }
-      const cleanUrl = new URL(window.location.href);
-      cleanUrl.searchParams.delete('panel_like');
-      cleanUrl.searchParams.delete('autolike');
-      cleanUrl.searchParams.delete('action');
-      window.history.replaceState({}, '', cleanUrl.toString());
+      const href = window.location.href;
+      let cleanHref = href
+        .replace(/[?&]panel_like=[^&]*/g, '')
+        .replace(/[?&]autolike=[^&]*/g, '')
+        .replace(/[?&]action=[^&]*/g, '')
+        .replace(/\?&/g, '?')
+        .replace(/\?$/g, '')
+        .replace(/#\?/, '#');
+      window.history.replaceState({}, '', cleanHref);
     }
 
     // Message listener for external panel integrations (iframes / webviews)
@@ -431,6 +445,44 @@ export default function VideoDetail() {
 
   const processedUrl = video ? preprocessVideoUrl(video.videoUrl) : '';
   const embedUrl = getEmbedUrl(processedUrl);
+
+  const [resolvedVideoSrc, setResolvedVideoSrc] = useState('');
+  const [resolvedPosterSrc, setResolvedPosterSrc] = useState('');
+  const isM3U8 = resolvedVideoSrc ? resolvedVideoSrc.toLowerCase().includes('.m3u8') : false;
+
+  // Reset player states when video ID or resolved source changes to prevent desync
+  useEffect(() => {
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setProgress(0);
+    setDuration(0);
+    if (videoRef.current) {
+      videoRef.current.currentTime = 0;
+    }
+  }, [id, resolvedVideoSrc]);
+
+  useEffect(() => {
+    let active = true;
+    const resolveUrls = async () => {
+      if (processedUrl) {
+        const resolvedUrl = await resolveMediaUrl(processedUrl);
+        if (active) setResolvedVideoSrc(resolvedUrl);
+      } else {
+        if (active) setResolvedVideoSrc('');
+      }
+
+      if (video?.thumbnail) {
+        const resolvedPoster = await resolveMediaUrl(video.thumbnail);
+        if (active) setResolvedPosterSrc(resolvedPoster);
+      } else {
+        if (active) setResolvedPosterSrc('');
+      }
+    };
+    resolveUrls();
+    return () => {
+      active = false;
+    };
+  }, [processedUrl, video?.thumbnail]);
 
   useEffect(() => {
     if (!id) return;
@@ -623,8 +675,8 @@ export default function VideoDetail() {
     let hls: Hls | null = null;
     const videoElement = videoRef.current;
 
-    if (videoElement && processedUrl) {
-      const isM3U8 = processedUrl.toLowerCase().includes('.m3u8');
+    if (videoElement && resolvedVideoSrc) {
+      const isM3U8 = resolvedVideoSrc.toLowerCase().includes('.m3u8');
       
       if (isM3U8) {
         if (Hls.isSupported()) {
@@ -633,7 +685,7 @@ export default function VideoDetail() {
             lowLatencyMode: true,
             backBufferLength: 90
           });
-          hls.loadSource(processedUrl);
+          hls.loadSource(resolvedVideoSrc);
           hls.attachMedia(videoElement);
           hls.on(Hls.Events.MANIFEST_PARSED, () => {
             // manifest loaded
@@ -657,10 +709,10 @@ export default function VideoDetail() {
             }
           });
         } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
-          videoElement.src = processedUrl;
+          videoElement.src = resolvedVideoSrc;
         }
       } else {
-        videoElement.src = processedUrl;
+        videoElement.src = resolvedVideoSrc;
       }
     }
 
@@ -669,7 +721,7 @@ export default function VideoDetail() {
         hls.destroy();
       }
     };
-  }, [processedUrl]);
+  }, [resolvedVideoSrc]);
 
   const togglePlay = () => {
     if (!videoRef.current) return;
@@ -1047,9 +1099,10 @@ export default function VideoDetail() {
                   {processedUrl ? (
                     <div className="w-full h-full relative group">
                       <video
-                        key={processedUrl}
+                        key={video?.id || 'video-player'}
                         ref={videoRef}
-                        poster={video.thumbnail}
+                        src={isM3U8 ? undefined : (resolvedVideoSrc || undefined)}
+                        poster={resolvedPosterSrc || video.thumbnail}
                         className="w-full h-full object-contain bg-black cursor-pointer"
                         preload="auto"
                         playsInline
@@ -1059,6 +1112,8 @@ export default function VideoDetail() {
                         onPause={() => setIsPlaying(false)}
                         onTimeUpdate={handleTimeUpdate}
                         onLoadedMetadata={handleTimeUpdate}
+                        onDurationChange={handleTimeUpdate}
+                        onCanPlay={handleTimeUpdate}
                         onEnded={() => setIsPlaying(false)}
                       />
                       
