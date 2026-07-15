@@ -327,6 +327,14 @@ export default function SiteSettingsPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2 md:col-span-2">
+              <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest block">Website Logo (URL)</label>
+              <input {...register('logo')} className="w-full bg-neutral-800 border border-white/5 rounded-xl py-3 px-4 focus:outline-none focus:border-rose-500 transition-colors text-sm" placeholder="e.g. https://example.com/logo.png" />
+              <p className="text-[11px] text-neutral-400 mt-1 leading-relaxed">
+                এখানে আপনার ওয়েবসাইটের লোগো ছবির লিংক (URL) দিন। <span className="text-rose-500 font-bold">লোগোর সাইজ ১২০ x ৪০ পিক্সেল (120x40px) বা ৩:১ অনুপাতের</span> হওয়া রিকমেন্ডেড যাতে এটি বাম পাশে সুন্দরভাবে মানিয়ে যায়। যদি খালি রাখেন তবে ডিফল্ট আইকন এবং সাইটের নাম প্রদর্শিত হবে।
+              </p>
+            </div>
+
             <div className="space-y-2">
               <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Primary Accent Color</label>
               <div className="flex gap-4">

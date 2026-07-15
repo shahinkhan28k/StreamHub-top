@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { collection, getDocs, doc, updateDoc, query, orderBy } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { UserProfile } from '../../types';
-import { User, Shield, ShieldAlert, ShieldCheck, Mail, Calendar, Search, MoreVertical, Check, X, ChevronLeft } from 'lucide-react';
+import { User, Shield, ShieldAlert, ShieldCheck, Mail, Calendar, Search, MoreVertical, Check, X, ChevronLeft, Crown } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import AdminSidebar from '../../components/AdminSidebar';
 
@@ -14,6 +14,51 @@ export default function UserManagement() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterRole, setFilterRole] = useState<string>('all');
   const [editingRole, setEditingRole] = useState<string | null>(null);
+
+  const [showSubModal, setShowSubModal] = useState(false);
+  const [selectedUserForSub, setSelectedUserForSub] = useState<UserProfile | null>(null);
+  const [selectedMonths, setSelectedMonths] = useState<string>('0');
+
+  const getSubscriptionStatus = (u: UserProfile) => {
+    if (!u.subscriptionType || u.subscriptionType === 'none') return null;
+    const expiry = u.subscriptionExpiresAt ? Number(u.subscriptionExpiresAt) : 0;
+    if (expiry && Date.now() > expiry) {
+      return { active: false, label: `Expired on ${new Date(expiry).toLocaleDateString()}` };
+    }
+    return { active: true, label: `Active (Expires: ${new Date(expiry).toLocaleDateString()})` };
+  };
+
+  const handleSaveSubscription = async () => {
+    if (!selectedUserForSub) return;
+    try {
+      const userRef = doc(db, 'users', selectedUserForSub.uid);
+      const months = Number(selectedMonths);
+      
+      let updateFields: any = {};
+      if (months === 0) {
+        updateFields = {
+          subscriptionType: 'none',
+          subscriptionExpiresAt: 0
+        };
+      } else {
+        const days = months * 30; // standard 30 days per month
+        updateFields = {
+          subscriptionType: 'monthly',
+          subscriptionExpiresAt: Date.now() + days * 24 * 60 * 60 * 1000
+        };
+      }
+      
+      await updateDoc(userRef, updateFields);
+      
+      // Update local state
+      setUsers(users.map(u => u.uid === selectedUserForSub.uid ? { ...u, ...updateFields } : u));
+      setShowSubModal(false);
+      setSelectedUserForSub(null);
+    } catch (error) {
+      console.error("Error updating subscription:", error);
+      alert("Failed to update user subscription.");
+    }
+  };
 
   useEffect(() => {
     fetchUsers();
@@ -148,7 +193,22 @@ export default function UserManagement() {
                             <User className="w-5 h-5 text-neutral-600" />
                           )}
                         </div>
-                        <span className="font-medium">{u.name}</span>
+                        <div className="flex flex-col">
+                          <span className="font-medium">{u.name}</span>
+                          {(() => {
+                            const status = getSubscriptionStatus(u);
+                            if (status) {
+                              return (
+                                <span className={`text-[10px] font-bold mt-0.5 flex items-center gap-1 ${
+                                  status.active ? 'text-purple-400' : 'text-neutral-500'
+                                }`}>
+                                  <Crown className="w-3 h-3 fill-current" /> {status.label}
+                                </span>
+                              );
+                            }
+                            return null;
+                          })()}
+                        </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 text-neutral-400 text-sm">{u.email}</td>
@@ -190,10 +250,31 @@ export default function UserManagement() {
                     <td className="px-6 py-4 text-neutral-400 text-sm">
                       {new Date(u.createdAt).toLocaleDateString()}
                     </td>
-                    <td className="px-6 py-4 text-right">
+                    <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
+                      <button 
+                        onClick={() => {
+                          setSelectedUserForSub(u);
+                          let currentMonths = '1';
+                          if (u.subscriptionType && u.subscriptionType !== 'none' && u.subscriptionExpiresAt) {
+                            const diffMs = u.subscriptionExpiresAt - Date.now();
+                            const diffDays = Math.max(0, Math.ceil(diffMs / (24 * 60 * 60 * 1000)));
+                            const approxMonths = Math.max(1, Math.round(diffDays / 30));
+                            currentMonths = String(approxMonths);
+                          } else {
+                            currentMonths = '0';
+                          }
+                          setSelectedMonths(currentMonths);
+                          setShowSubModal(true);
+                        }}
+                        className="p-2 hover:bg-purple-600/20 rounded-lg text-purple-400 hover:text-purple-300 transition-colors"
+                        title="সাবস্ক্রিপশন যোগ/ম্যানেজ করুন (Manage Subscription)"
+                      >
+                        <Crown className="w-4 h-4" />
+                      </button>
                       <button 
                         onClick={() => setEditingRole(u.uid)}
                         className="p-2 hover:bg-white/10 rounded-lg text-neutral-500 hover:text-white transition-colors"
+                        title="রোল এডিট করুন (Edit Role)"
                       >
                         <Shield className="w-4 h-4" />
                       </button>
@@ -211,6 +292,110 @@ export default function UserManagement() {
           </table>
         </div>
       </div>
+
+      {/* Manage Subscription Modal */}
+      <AnimatePresence>
+        {showSubModal && selectedUserForSub && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => {
+                setShowSubModal(false);
+                setSelectedUserForSub(null);
+              }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+
+            {/* Modal Body */}
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="relative w-full max-w-md bg-neutral-900 border border-white/10 rounded-3xl p-6 shadow-2xl overflow-hidden z-10 text-white"
+            >
+              <div className="flex items-center justify-between border-b border-white/5 pb-4 mb-4">
+                <h3 className="text-lg font-bold flex items-center gap-2">
+                  <Crown className="w-5 h-5 text-purple-400" />
+                  সাবস্ক্রিপশন যোগ করুন (Manage Subscription)
+                </h3>
+                <button 
+                  onClick={() => {
+                    setShowSubModal(false);
+                    setSelectedUserForSub(null);
+                  }}
+                  className="p-1 hover:bg-white/10 rounded-lg text-neutral-400 hover:text-white transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="p-3.5 bg-white/5 rounded-2xl flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-purple-600/10 flex items-center justify-center text-purple-400 font-bold">
+                    {selectedUserForSub.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold">{selectedUserForSub.name}</h4>
+                    <p className="text-xs text-neutral-400">{selectedUserForSub.email}</p>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-neutral-400 uppercase tracking-wider block">
+                    সাবস্ক্রিপশন মেয়াদ নির্বাচন করুন (Select Duration)
+                  </label>
+                  <select
+                    value={selectedMonths}
+                    onChange={(e) => setSelectedMonths(e.target.value)}
+                    className="w-full bg-neutral-950 border border-white/10 focus:border-purple-500 rounded-xl px-4 py-3 text-sm text-white focus:outline-none transition-colors"
+                  >
+                    <option value="0">কোন সাবস্ক্রিপশন নেই (No Subscription / None)</option>
+                    <option value="1">১ মাস (1 Month - 30 Days)</option>
+                    <option value="2">২ মাস (2 Months - 60 Days)</option>
+                    <option value="3">৩ মাস (3 Months - 90 Days)</option>
+                    <option value="4">৪ মাস (4 Months - 120 Days)</option>
+                    <option value="5">৫ মাস (5 Months - 150 Days)</option>
+                    <option value="6">৬ মাস (6 Months - 180 Days)</option>
+                    <option value="7">৭ মাস (7 Months - 210 Days)</option>
+                    <option value="8">৮ মাস (8 Months - 240 Days)</option>
+                    <option value="9">৯ মাস (9 Months - 270 Days)</option>
+                    <option value="10">১০ মাস (10 Months - 300 Days)</option>
+                    <option value="11">১১ মাস (11 Months - 330 Days)</option>
+                    <option value="12">১ বছর (1 Year - 365 Days)</option>
+                  </select>
+                </div>
+
+                {selectedMonths !== '0' && (
+                  <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-2xl text-xs text-purple-400 leading-relaxed">
+                    সংরক্ষণ করার পর, এই ব্যবহারকারীর জন্য সাবস্ক্রিপশন একটিভ হবে এবং আজকের তারিখ থেকে আগামী {Number(selectedMonths) * 30} দিন পর্যন্ত প্রিমিয়াম অ্যাক্সেস বজায় থাকবে।
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={() => {
+                      setShowSubModal(false);
+                      setSelectedUserForSub(null);
+                    }}
+                    className="flex-1 py-3 bg-neutral-800 hover:bg-neutral-700 text-neutral-400 hover:text-white rounded-xl font-bold transition-all text-xs uppercase tracking-wider"
+                  >
+                    বাতিল (Cancel)
+                  </button>
+                  <button
+                    onClick={handleSaveSubscription}
+                    className="flex-1 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold transition-all text-xs uppercase tracking-wider shadow-lg shadow-purple-600/15"
+                  >
+                    সংরক্ষণ করুন (Save)
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   </div>
 </div>

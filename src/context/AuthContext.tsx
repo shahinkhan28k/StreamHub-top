@@ -9,6 +9,10 @@ interface AuthContextType {
   profile: UserProfile | null;
   loading: boolean;
   isAdmin: boolean;
+  isSubscribed: boolean;
+  hasPremiumAccess: boolean;
+  updateProfile: (updatedData: Partial<UserProfile>) => Promise<void>;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -16,6 +20,10 @@ const AuthContext = createContext<AuthContextType>({
   profile: null,
   loading: true,
   isAdmin: false,
+  isSubscribed: false,
+  hasPremiumAccess: false,
+  updateProfile: async () => {},
+  refreshProfile: async () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -64,11 +72,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return unsubscribe;
   }, []);
 
+  const refreshProfile = async () => {
+    if (user) {
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      if (userDoc.exists()) {
+        setProfile(userDoc.data() as UserProfile);
+      }
+    }
+  };
+
+  const updateProfile = async (updatedData: Partial<UserProfile>) => {
+    if (user) {
+      const userRef = doc(db, 'users', user.uid);
+      await updateDoc(userRef, updatedData);
+      setProfile((prev) => prev ? { ...prev, ...updatedData } as UserProfile : null);
+    }
+  };
+
+  const getExpiryTimestamp = (val: any): number => {
+    if (!val) return 0;
+    if (typeof val === 'number') return val;
+    if (typeof val === 'string') {
+      const parsed = Date.parse(val);
+      return isNaN(parsed) ? 0 : parsed;
+    }
+    return 0;
+  };
+
+  const isSubscribed = !!(
+    profile &&
+    profile.subscriptionType &&
+    profile.subscriptionType !== 'none' &&
+    (!profile.subscriptionExpiresAt || Date.now() < getExpiryTimestamp(profile.subscriptionExpiresAt))
+  );
+
+  const hasPremiumAccess = profile?.role === 'admin' || isSubscribed;
+
   const value = {
     user,
     profile,
     loading,
     isAdmin: profile?.role === 'admin',
+    isSubscribed,
+    hasPremiumAccess,
+    updateProfile,
+    refreshProfile,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -4,9 +4,9 @@ import {
   Play, Pause, Volume2, VolumeX, Maximize, Settings, 
   ChevronLeft, Share2, Heart, ThumbsUp, MessageSquare, 
   Lock, ExternalLink, FastForward, Rewind, Megaphone,
-  Gamepad2, Download, Send, CheckCircle2, ShieldAlert
+  Gamepad2, Download, Send, CheckCircle2, ShieldAlert, Crown
 } from 'lucide-react';
-import { doc, getDoc, updateDoc, increment, collection, query, where, limit, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, increment, collection, query, where, limit, getDocs, addDoc, serverTimestamp, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Video, Comment, SiteSettings } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -268,7 +268,7 @@ const safeLocalStorage = {
 
 export default function VideoDetail() {
   const { id } = useParams<{ id: string }>();
-  const { user, profile, isAdmin } = useAuth();
+  const { user, profile, isAdmin, isSubscribed, hasPremiumAccess } = useAuth();
   const navigate = useNavigate();
   const [video, setVideo] = useState<Video | null>(null);
   const [siteSettings, setSiteSettings] = useState<SiteSettings | null>(null);
@@ -283,7 +283,7 @@ export default function VideoDetail() {
   const [activeAdCampaign, setActiveAdCampaign] = useState<string | null>(null);
   const timerInterval = useRef<number | null>(null);
 
-  // Like and Save state synced with localStorage
+  // Like and Save state synced with Firestore for logged-in users, fallback to localStorage
   const [isLiked, setIsLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
@@ -291,51 +291,88 @@ export default function VideoDetail() {
 
   useEffect(() => {
     if (!id) return;
-    const likedVideos = JSON.parse(safeLocalStorage.getItem('likedVideos') || '[]');
-    setIsLiked(likedVideos.includes(id));
 
-    const savedVideos = JSON.parse(safeLocalStorage.getItem('savedVideos') || '[]');
-    setIsSaved(savedVideos.includes(id));
-  }, [id]);
+    const checkLikedAndSaved = async () => {
+      if (user) {
+        try {
+          // Check if liked in Firestore
+          const favRef = doc(db, 'users', user.uid, 'favorites', id);
+          const favSnap = await getDoc(favRef);
+          setIsLiked(favSnap.exists());
+
+          // Check if saved in Firestore
+          const savedRef = doc(db, 'users', user.uid, 'saved', id);
+          const savedSnap = await getDoc(savedRef);
+          setIsSaved(savedSnap.exists());
+        } catch (err) {
+          console.warn("Firestore status check failed, using local fallback", err);
+          const likedVideos = JSON.parse(safeLocalStorage.getItem('likedVideos') || '[]');
+          setIsLiked(likedVideos.includes(id));
+          const savedVideos = JSON.parse(safeLocalStorage.getItem('savedVideos') || '[]');
+          setIsSaved(savedVideos.includes(id));
+        }
+      } else {
+        const likedVideos = JSON.parse(safeLocalStorage.getItem('likedVideos') || '[]');
+        setIsLiked(likedVideos.includes(id));
+        const savedVideos = JSON.parse(safeLocalStorage.getItem('savedVideos') || '[]');
+        setIsSaved(savedVideos.includes(id));
+      }
+    };
+
+    checkLikedAndSaved();
+  }, [id, user]);
 
   useEffect(() => {
     if (!video || !id) return;
-    const likedVideos = JSON.parse(safeLocalStorage.getItem('likedVideos') || '[]');
-    const isCurrentlyLiked = likedVideos.includes(id);
-    // @ts-ignore
-    const baseLikes = video.likes || Math.abs(id.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % 200) + 12;
-    setLikeCount(baseLikes + (isCurrentlyLiked ? 1 : 0));
+    const baseLikes = video.likes || 0;
+    setLikeCount(baseLikes);
   }, [video, id]);
 
   const handleLike = async () => {
     if (!id || !video) return;
     
+    const newIsLiked = !isLiked;
+    setIsLiked(newIsLiked);
+    setLikeCount(prev => Math.max(0, prev + (newIsLiked ? 1 : -1)));
+
+    // LocalStorage Sync
     const likedVideos = JSON.parse(safeLocalStorage.getItem('likedVideos') || '[]');
     let newLikedVideos = [...likedVideos];
-    let newIsLiked = false;
-    let newLikeCount = likeCount;
-
-    if (likedVideos.includes(id)) {
-      newLikedVideos = newLikedVideos.filter(vid => vid !== id);
-      newIsLiked = false;
-      newLikeCount = Math.max(0, likeCount - 1);
+    if (newIsLiked) {
+      if (!newLikedVideos.includes(id)) newLikedVideos.push(id);
     } else {
-      newLikedVideos.push(id);
-      newIsLiked = true;
-      newLikeCount = likeCount + 1;
+      newLikedVideos = newLikedVideos.filter(vid => vid !== id);
     }
-
     safeLocalStorage.setItem('likedVideos', JSON.stringify(newLikedVideos));
-    setIsLiked(newIsLiked);
-    setLikeCount(newLikeCount);
 
     try {
+      // 1. Update Video likes counter
       const docRef = doc(db, 'videos', id);
       await updateDoc(docRef, { 
         likes: increment(newIsLiked ? 1 : -1) 
       });
+
+      // 2. Add/Remove in user favorites
+      if (user) {
+        const favRef = doc(db, 'users', user.uid, 'favorites', id);
+        if (newIsLiked) {
+          await setDoc(favRef, {
+            id: video.id,
+            title: video.title,
+            thumbnail: video.thumbnail,
+            duration: video.duration || '00:00',
+            categoryId: video.categoryId,
+            views: video.views,
+            isPremium: video.isPremium || false,
+            createdAt: video.createdAt,
+            likedAt: Date.now()
+          });
+        } else {
+          await deleteDoc(favRef);
+        }
+      }
     } catch (e) {
-      console.warn("Could not sync like to Firestore");
+      console.warn("Could not sync like to Firestore:", e);
     }
   };
 
@@ -409,23 +446,45 @@ export default function VideoDetail() {
     return () => window.removeEventListener('message', handleMessage);
   }, [id, video, likeCount]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!id || !video) return;
 
+    const newIsSaved = !isSaved;
+    setIsSaved(newIsSaved);
+
+    // Sync to LocalStorage
     const savedVideos = JSON.parse(safeLocalStorage.getItem('savedVideos') || '[]');
     let newSavedVideos = [...savedVideos];
-    let newIsSaved = false;
-
-    if (savedVideos.includes(id)) {
-      newSavedVideos = newSavedVideos.filter(vid => vid !== id);
-      newIsSaved = false;
+    if (newIsSaved) {
+      if (!newSavedVideos.includes(id)) newSavedVideos.push(id);
     } else {
-      newSavedVideos.push(id);
-      newIsSaved = true;
+      newSavedVideos = newSavedVideos.filter(vid => vid !== id);
     }
-
     safeLocalStorage.setItem('savedVideos', JSON.stringify(newSavedVideos));
-    setIsSaved(newIsSaved);
+
+    // Sync to Firestore
+    try {
+      if (user) {
+        const savedRef = doc(db, 'users', user.uid, 'saved', id);
+        if (newIsSaved) {
+          await setDoc(savedRef, {
+            id: video.id,
+            title: video.title,
+            thumbnail: video.thumbnail,
+            duration: video.duration || '00:00',
+            categoryId: video.categoryId,
+            views: video.views,
+            isPremium: video.isPremium || false,
+            createdAt: video.createdAt,
+            savedAt: Date.now()
+          });
+        } else {
+          await deleteDoc(savedRef);
+        }
+      }
+    } catch (e) {
+      console.warn("Could not sync save to Firestore:", e);
+    }
   };
   
   // Video Player State
@@ -571,6 +630,26 @@ export default function VideoDetail() {
         
         if (videoData) {
           setVideo(videoData);
+
+          // Save to Watch History in Firestore
+          if (user) {
+            try {
+              const historyRef = doc(db, 'users', user.uid, 'history', id);
+              await setDoc(historyRef, {
+                id: videoData.id,
+                title: videoData.title,
+                thumbnail: videoData.thumbnail,
+                duration: videoData.duration || '00:00',
+                categoryId: videoData.categoryId,
+                views: videoData.views,
+                isPremium: videoData.isPremium || false,
+                createdAt: videoData.createdAt,
+                lastWatched: Date.now()
+              });
+            } catch (historyErr) {
+              console.warn("Could not save to watch history in Firestore:", historyErr);
+            }
+          }
           
           if (videoData.locked && !isUnlocked && settings?.adConfig?.enabled && !isAdmin) {
             setShowLockedScreen(true);
@@ -935,7 +1014,43 @@ export default function VideoDetail() {
       <div className="lg:col-span-2 space-y-6">
         {/* Player Container */}
         <div className="relative aspect-video bg-neutral-950 rounded-3xl overflow-hidden group shadow-2xl border border-white/5">
-          {showLockedScreen ? (
+          {video?.isPremium && !hasPremiumAccess ? (
+            <div className="absolute inset-0 z-25 bg-neutral-950 flex flex-col items-center justify-center p-6 text-center select-none overflow-y-auto">
+              <div className="w-full max-w-md flex flex-col items-center justify-center h-full space-y-6">
+                <div className="w-16 h-16 rounded-2xl bg-purple-600/10 flex items-center justify-center border border-purple-500/20 text-purple-500 animate-bounce">
+                  <Crown className="w-8 h-8 fill-current" />
+                </div>
+                
+                <div className="space-y-2">
+                  <span className="px-3 py-1 bg-purple-600/10 border border-purple-500/20 rounded-full text-purple-400 text-[10px] font-bold uppercase tracking-widest">
+                    প্রিমিয়াম ভিডিও (Premium Video)
+                  </span>
+                  <h2 className="text-xl md:text-2xl font-black text-white tracking-tight">
+                    এই ভিডিওটি দেখতে সাবস্ক্রিপশন প্রয়োজন
+                  </h2>
+                  <p className="text-neutral-400 text-xs md:text-sm max-w-sm mx-auto leading-relaxed">
+                    এটি একটি প্রিমিয়াম ভিডিও। দেখার জন্য মাসিক বা বাৎসরিক মেম্বারশিপ প্যাকেজটি সাবস্ক্রাইব করুন।
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 w-full">
+                  <button 
+                    onClick={() => navigate('/subscription')}
+                    className="w-full py-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-2xl font-bold transition-all shadow-xl shadow-purple-600/10 flex items-center justify-center gap-2 text-xs uppercase tracking-wider"
+                  >
+                    <Crown className="w-4 h-4 fill-current" />
+                    সাবস্ক্রিপশন প্যাকেজ দেখুন (View Subscription Plans)
+                  </button>
+                  <button 
+                    onClick={() => navigate('/')}
+                    className="w-full py-3.5 bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-white rounded-2xl font-bold transition-all text-xs uppercase tracking-wider border border-white/5"
+                  >
+                    হোম পেজে ফিরে যান (Go to Home)
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : showLockedScreen ? (
             <div className="absolute inset-0 z-20 bg-neutral-950 flex flex-col items-center justify-center p-4 md:p-6 text-center select-none overflow-y-auto">
               {!hasClickedAd ? (
                 <div className="w-full max-w-2xl flex flex-col items-center justify-center h-full">

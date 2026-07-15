@@ -97,6 +97,40 @@
         "socialLinks": { "type": "object" },
         "featureToggles": { "type": "object" }
       }
+    },
+    "PaymentSetting": {
+      "title": "Payment Setting",
+      "description": "Admin settings for mobile banking gateways",
+      "type": "object",
+      "properties": {
+        "bkashNumber": { "type": "string" },
+        "bkashType": { "type": "string", "enum": ["personal", "agent"] },
+        "nagadNumber": { "type": "string" },
+        "nagadType": { "type": "string", "enum": ["personal", "agent"] },
+        "rocketNumber": { "type": "string" },
+        "rocketType": { "type": "string", "enum": ["personal", "agent"] }
+      }
+    },
+    "SubscriptionRequest": {
+      "title": "Subscription Request",
+      "description": "User requests for subscription upgrade",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "userName": { "type": "string" },
+        "plan": { "type": "string", "enum": ["monthly", "yearly"] },
+        "amount": { "type": "number" },
+        "paymentMethod": { "type": "string", "enum": ["bkash", "nagad", "rocket"] },
+        "senderNumber": { "type": "string" },
+        "transactionId": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" },
+        "rejectionReason": { "type": "string" }
+      },
+      "required": ["userId", "userEmail", "plan", "amount", "paymentMethod", "senderNumber", "transactionId", "status", "createdAt"]
     }
   },
   "firestore": {
@@ -127,6 +161,14 @@
     "/settings/general": {
       "schema": "Setting",
       "description": "General settings"
+    },
+    "/settings/payment": {
+      "schema": "PaymentSetting",
+      "description": "Payment gateway numbers and types"
+    },
+    "/subscriptionRequests/{requestId}": {
+      "schema": "SubscriptionRequest",
+      "description": "User subscription payment verification requests"
     }
   }
 }

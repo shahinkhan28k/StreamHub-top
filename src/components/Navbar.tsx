@@ -12,6 +12,8 @@ export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [logoUrl, setLogoUrl] = useState<string>('');
+  const [siteName, setSiteName] = useState<string>('Deshi Hubx');
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const navigate = useNavigate();
 
@@ -19,6 +21,14 @@ export default function Navbar() {
     const unsub = onSnapshot(doc(db, 'settings', 'general'), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
+        if (data.logo) {
+          setLogoUrl(data.logo);
+        } else {
+          setLogoUrl('');
+        }
+        if (data.siteName) {
+          setSiteName(data.siteName);
+        }
         if (data.navigationMenu && data.navigationMenu.length > 0) {
           setMenuItems(data.navigationMenu);
         } else {
@@ -31,6 +41,8 @@ export default function Navbar() {
           ]);
         }
       } else {
+        setLogoUrl('');
+        setSiteName('Deshi Hubx');
         setMenuItems([
           { id: '1', label: 'Home', link: '/' },
           { id: '2', label: 'Movies', link: '/category/movies' },
@@ -61,10 +73,14 @@ export default function Navbar() {
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center gap-8">
             <Link to="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-rose-600 rounded-lg flex items-center justify-center">
-                <Play className="w-5 h-5 text-white fill-current" />
-              </div>
-              <span className="text-xl font-bold tracking-tight">Deshi Hubx</span>
+              {logoUrl ? (
+                <img src={logoUrl} alt={siteName} className="h-8 max-h-8 object-contain rounded-lg" style={{ minWidth: '32px' }} />
+              ) : (
+                <div className="w-8 h-8 bg-rose-600 rounded-lg flex items-center justify-center">
+                  <Play className="w-5 h-5 text-white fill-current" />
+                </div>
+              )}
+              <span className="text-xl font-bold tracking-tight">{siteName}</span>
             </Link>
 
             <div className="hidden md:flex items-center gap-6 text-sm font-medium text-neutral-400">

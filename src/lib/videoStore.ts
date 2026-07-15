@@ -160,6 +160,7 @@ export async function saveStoredVideo(videoData: Partial<Video> & { id?: string 
     createdAt: videoData.createdAt || Date.now(),
     featured: !!videoData.featured,
     locked: !!videoData.locked,
+    isPremium: videoData.isPremium !== undefined ? !!videoData.isPremium : false,
     published: videoData.published !== undefined ? !!videoData.published : true,
     tags: videoData.tags || []
   };

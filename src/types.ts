@@ -19,6 +19,8 @@ export interface UserProfile {
   avatar?: string;
   role: UserRole;
   createdAt: number;
+  subscriptionType?: 'none' | 'monthly' | 'yearly';
+  subscriptionExpiresAt?: number;
 }
 
 export interface Category {
@@ -45,6 +47,7 @@ export interface Video {
   adClicks: number;
   published: boolean;
   tags: string[];
+  isPremium?: boolean;
 }
 
 export interface Comment {

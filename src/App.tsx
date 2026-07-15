@@ -16,6 +16,8 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import VideoManagement from './pages/admin/VideoManagement';
 import SiteSettingsPage from './pages/admin/SiteSettingsPage';
 import UserManagement from './pages/admin/UserManagement';
+import Subscription from './pages/Subscription';
+import PaymentManagement from './pages/admin/PaymentManagement';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import FloatingSupport from './components/FloatingSupport';
@@ -159,6 +161,11 @@ const AppContent = () => {
                 <Profile />
               </ProtectedRoute>
             } />
+            <Route path="/subscription" element={
+              <ProtectedRoute>
+                <Subscription />
+              </ProtectedRoute>
+            } />
 
             <Route path="/admin" element={
               <ProtectedRoute adminOnly>
@@ -168,6 +175,11 @@ const AppContent = () => {
             <Route path="/admin/videos" element={
               <ProtectedRoute adminOnly>
                 <VideoManagement />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/payments" element={
+              <ProtectedRoute adminOnly>
+                <PaymentManagement />
               </ProtectedRoute>
             } />
             <Route path="/admin/settings" element={

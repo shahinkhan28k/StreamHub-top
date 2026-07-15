@@ -33,13 +33,17 @@ service cloud.firestore {
       match /favorites/{favoriteId} {
         allow read, write: if isOwner(userId);
       }
+
+      match /saved/{savedId} {
+        allow read, write: if isOwner(userId);
+      }
     }
 
     // Videos collection
     match /videos/{videoId} {
       allow read: if true;
       allow create: if isSignedIn();
-      allow update: if isAdmin() || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views', 'adClicks']));
+      allow update: if isAdmin() || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views', 'adClicks', 'likes', 'duration']));
       allow delete: if isAdmin();
       
       match /comments/{commentId} {
@@ -59,6 +63,13 @@ service cloud.firestore {
     match /settings/{settingId} {
       allow read: if true;
       allow write: if isAdmin();
+    }
+
+    // Subscription Requests
+    match /subscriptionRequests/{requestId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
     }
 
     // Connection test document

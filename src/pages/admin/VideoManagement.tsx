@@ -6,7 +6,7 @@ import { Video } from '../../types';
 import { 
   Plus, Edit2, Trash2, Eye, Search, Filter, Play, X, Check, 
   Lock, Unlock, Sparkles, Megaphone, Upload, FileVideo, 
-  Image as ImageIcon, RefreshCw, AlertTriangle, CheckCircle, Database
+  Image as ImageIcon, RefreshCw, AlertTriangle, CheckCircle, Database, Crown
 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { Link, useNavigate } from 'react-router-dom';
@@ -179,6 +179,7 @@ export default function VideoManagement() {
       published: true,
       featured: false,
       locked: false,
+      isPremium: false,
       uploadStorageType: 'local'
     }
   });
@@ -680,6 +681,7 @@ export default function VideoManagement() {
         featured: !!data.featured,
         locked: !!data.locked,
         published: !!data.published,
+        isPremium: !!data.isPremium,
         views: editingVideo ? editingVideo.views : 0,
         adClicks: editingVideo ? editingVideo.adClicks : 0,
         createdAt: editingVideo ? editingVideo.createdAt : Date.now(),
@@ -763,6 +765,7 @@ export default function VideoManagement() {
     setValue('featured', video.featured);
     setValue('locked', video.locked);
     setValue('published', video.published);
+    setValue('isPremium', !!video.isPremium);
     setIsModalOpen(true);
   };
 
@@ -781,6 +784,7 @@ export default function VideoManagement() {
       tags: '',
       featured: false,
       locked: false,
+      isPremium: false,
       published: true
     });
     setIsModalOpen(true);
@@ -810,16 +814,18 @@ export default function VideoManagement() {
           <div className="flex items-center">
             <button 
               type="button"
-              onClick={() => navigate(-1)} 
+              onClick={() => isModalOpen ? setIsModalOpen(false) : navigate(-1)} 
               className="flex items-center gap-2 px-4 py-2 bg-neutral-900 hover:bg-neutral-800 border border-white/5 hover:border-white/10 rounded-full text-xs font-bold text-neutral-300 hover:text-white transition-all shadow-xl"
             >
               <ChevronLeft className="w-4 h-4 text-rose-500" />
-              <span>ফিরে যান (Go Back)</span>
+              <span>{isModalOpen ? 'তালিকায় ফিরে যান (Back to List)' : 'ফিরে যান (Go Back)'}</span>
             </button>
           </div>
 
-          {/* Top Title & Quick Actions */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-neutral-900/40 p-6 rounded-3xl border border-white/5">
+          {!isModalOpen ? (
+            <>
+              {/* Top Title & Quick Actions */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-neutral-900/40 p-6 rounded-3xl border border-white/5">
         <div>
           <h1 className="text-3xl font-black tracking-tight flex items-center gap-2">
             Video Management Hub
@@ -944,6 +950,11 @@ export default function VideoManagement() {
                             <Lock className="w-3 h-3 text-neutral-950" />
                           </div>
                         )}
+                        {video.isPremium && (
+                          <div className="absolute top-1 left-1 bg-purple-600/90 backdrop-blur-sm p-1 rounded-md">
+                            <Crown className="w-3 h-3 text-white fill-current" />
+                          </div>
+                        )}
                         <span className="absolute bottom-1 right-1 bg-black/70 text-[9px] px-1 rounded font-mono text-neutral-300">
                           {video.duration}
                         </span>
@@ -1028,16 +1039,14 @@ export default function VideoManagement() {
           </div>
         )}
       </div>
-
-      {/* Modal Add/Edit */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-neutral-900 border border-white/10 rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl"
-          >
-            <div className="p-6 border-b border-white/5 flex items-center justify-between sticky top-0 bg-neutral-900 z-10">
+      </>
+      ) : (
+        <motion.div 
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-neutral-900 border border-white/5 rounded-3xl w-full shadow-2xl overflow-hidden"
+        >
+          <div className="p-6 border-b border-white/5 flex items-center justify-between sticky top-0 bg-neutral-900 z-10">
               <div>
                 <h2 className="text-xl font-bold">{editingVideo ? 'Modify Streaming Asset' : 'Add New Streaming Asset'}</h2>
                 <p className="text-neutral-400 text-xs">Fill details or choose one of our high-speed preset templates</p>
@@ -1307,6 +1316,15 @@ export default function VideoManagement() {
 
                   <label className="flex items-center gap-3 cursor-pointer group">
                     <div className="relative">
+                      <input type="checkbox" {...register('isPremium')} className="peer sr-only" />
+                      <div className="w-10 h-6 bg-neutral-700 peer-checked:bg-purple-600 rounded-full transition-colors" />
+                      <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-4" />
+                    </div>
+                    <span className="text-xs font-bold text-neutral-300 group-hover:text-white transition-colors uppercase tracking-wider">Premium (Subscription)</span>
+                  </label>
+
+                  <label className="flex items-center gap-3 cursor-pointer group">
+                    <div className="relative">
                       <input type="checkbox" {...register('published')} className="peer sr-only" />
                       <div className="w-10 h-6 bg-neutral-700 peer-checked:bg-emerald-500 rounded-full transition-colors" />
                       <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-4" />
@@ -1341,8 +1359,7 @@ export default function VideoManagement() {
               </div>
             </form>
           </motion.div>
-        </div>
-      )}
+          )}
 
       {/* High-Fidelity Fullscreen Upload Progress Overlay */}
       {uploading && (

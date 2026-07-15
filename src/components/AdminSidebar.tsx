@@ -2,7 +2,7 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, Play, Settings as SettingsIcon, Users, 
-  ArrowLeft, Globe, Megaphone, Home, HelpCircle 
+  ArrowLeft, Globe, Megaphone, Home, HelpCircle, CreditCard 
 } from 'lucide-react';
 
 export default function AdminSidebar() {
@@ -27,6 +27,12 @@ export default function AdminSidebar() {
       path: '/admin/settings',
       icon: Globe,
       desc: 'Change category names & submenus'
+    },
+    {
+      label: 'Payment Gateway',
+      path: '/admin/payments',
+      icon: CreditCard,
+      desc: 'Gateway settings & subscription requests'
     },
     {
       label: 'Manage Users',

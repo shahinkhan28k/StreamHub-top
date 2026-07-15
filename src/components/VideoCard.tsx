@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Play, Eye, Clock, Calendar, Lock } from 'lucide-react';
+import { Play, Eye, Clock, Calendar, Lock, Crown } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { Video } from '../types';
 import { motion } from 'motion/react';
@@ -59,6 +59,13 @@ const VideoCard: React.FC<{ video: Video }> = ({ video }) => {
           {video.locked && (
             <div className="absolute top-2 right-2 bg-neutral-950/80 backdrop-blur-md p-1.5 rounded-full border border-white/10">
               <Lock className="w-3.5 h-3.5 text-amber-500" />
+            </div>
+          )}
+          
+          {video.isPremium && (
+            <div className="absolute top-2 left-2 bg-purple-600 text-white flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider shadow-lg border border-purple-400/20 z-10">
+              <Crown className="w-3 h-3 fill-current text-white animate-pulse" />
+              <span>Premium</span>
             </div>
           )}
           
